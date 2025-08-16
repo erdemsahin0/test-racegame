@@ -50,13 +50,14 @@ class GameScene extends Phaser.Scene {
         this.load.image('enemy_car_yellow', 'assets/enemy_car_yellow.png');
         this.load.image('enemy_car_blue_sky', 'assets/enemy_car_blue_sky.png');
         this.load.image('enemy_car_police', 'assets/enemy_car_police.png');
+        this.load.image('obstacle_roadblock_a', 'assets/obstacle_roadblock_a.png');
     }
 
     create() {
         this.roadLeftBoundary = 150;
         this.roadRightBoundary = 650;
         this.intersectionYPositions = [150, 450];
-        // --- REMOVED: The playerMinY and playerMaxY variables are no longer needed ---
+        // --- FIX 1: Removed the playerMinY and playerMaxY variables ---
         
         // Reset variables
         this.lives = 3;
@@ -68,7 +69,6 @@ class GameScene extends Phaser.Scene {
         this.policeSpeed = 100;
 
         this.road = this.add.tileSprite(400, 300, 800, 600, 'road');
-        
         this.car = this.physics.add.sprite(400, 500, 'player_car_hero');
         this.car.setCollideWorldBounds(true);
         this.car.body.setSize(45, 130);
@@ -78,21 +78,30 @@ class GameScene extends Phaser.Scene {
         this.input.on('dragstart', () => { this.isDragging = true; });
         this.input.on('drag', (pointer, gameObject, dragX, dragY) => {
             gameObject.x = Phaser.Math.Clamp(dragX, this.roadLeftBoundary, this.roadRightBoundary);
-            // --- UPDATED: Allow dragging across the full screen height (with a small buffer) ---
+            // --- FIX 1: Allow dragging across the full screen height (with a small buffer) ---
             gameObject.y = Phaser.Math.Clamp(dragY, 50, 550);
         });
         this.input.on('dragend', () => { this.isDragging = false; });
         
         this.enemyCars = this.physics.add.group();
         this.policeCars = this.physics.add.group();
+        this.roadblocks = this.physics.add.group();
 
         this.spawnTimer = this.time.addEvent({ delay: this.spawnDelay, callback: this.spawnEnemyCar, callbackScope: this, loop: true });
         this.policeSpawnTimer = this.time.addEvent({ delay: 8000, callback: this.spawnPoliceCar, callbackScope: this, loop: true });
+        this.roadblockSpawnTimer = this.time.addEvent({
+            delay: 4000,
+            callback: this.spawnRoadblock,
+            callbackScope: this,
+            loop: true,
+            paused: true
+        });
 
         this.physics.add.overlap(this.car, this.enemyCars, this.hitEnemy, null, this);
         this.physics.add.overlap(this.car, this.policeCars, this.hitEnemy, null, this);
         this.physics.add.collider(this.policeCars, this.enemyCars);
         this.physics.add.collider(this.policeCars, this.policeCars);
+        this.physics.add.overlap(this.car, this.roadblocks, this.hitRoadblock, null, this);
         
         this.cursors = this.input.keyboard.createCursorKeys();
         this.scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '32px', fill: '#fff', fontStyle: 'bold' });
@@ -101,19 +110,49 @@ class GameScene extends Phaser.Scene {
     }
 
     updateScore() {
-        // (This function is unchanged)
         this.score += 1;
         this.scoreText.setText('Score: ' + this.score);
+        
         if (this.score > 0 && this.score % 200 === 0 && this.spawnDelay > 600) {
             this.roadSpeed += 0.5;
             this.enemySpeed += 20;
-            this.spawnTimer.delay *= 0.95;
             this.policeSpeed += 25;
+            this.spawnTimer.delay *= 0.95;
+            
+            if (!this.roadblockSpawnTimer.paused && this.roadblockSpawnTimer.delay > 1500) {
+                this.roadblockSpawnTimer.delay *= 0.95;
+            }
         }
+        
+        // --- FIX 3: Activate roadblocks after score reaches 500 ---
+        if (this.score >= 500 && this.roadblockSpawnTimer.paused) {
+            this.roadblockSpawnTimer.paused = false;
+            console.log("ROADBLOCKS ACTIVATED!");
+        }
+    }
+    
+    spawnRoadblock() {
+        const x = Phaser.Math.Between(this.roadLeftBoundary, this.roadRightBoundary);
+        const y = -50;
+        const roadblock = this.roadblocks.create(x, y, 'obstacle_roadblock_a');
+        roadblock.setScale(2);
+        roadblock.body.setSize(roadblock.width * 0.8, roadblock.height * 0.8);
+        // --- FIX 2: Roadblocks no longer have their own velocity ---
+        // They will be moved manually in the update() loop
+    }
+    
+    hitRoadblock(player, roadblock) {
+        if (this.isInvincible) return;
+        console.log('CRASH! Hit a roadblock.');
+        this.physics.pause();
+        this.spawnTimer.paused = true;
+        this.policeSpawnTimer.paused = true;
+        this.roadblockSpawnTimer.paused = true;
+        this.scoreTimer.paused = true;
+        this.scene.start('GameOverScene', { score: this.score });
     }
 
     spawnEnemyCar() {
-        // (This function is unchanged)
         const x = Phaser.Math.Between(this.roadLeftBoundary, this.roadRightBoundary);
         const y = -50;
         const carTypes = ['enemy_car_green', 'enemy_car_yellow', 'enemy_car_blue_sky'];
@@ -124,7 +163,6 @@ class GameScene extends Phaser.Scene {
     }
 
     spawnPoliceCar() {
-        // (This function is unchanged)
         const side = Phaser.Math.RND.pick(['left', 'right']);
         const yPos = Phaser.Math.RND.pick(this.intersectionYPositions);
         let startX, driveOnToX, mergeToX;
@@ -148,7 +186,6 @@ class GameScene extends Phaser.Scene {
     }
 
     hitEnemy(player, enemyCar) {
-        // (This function is unchanged)
         if (this.isInvincible) return;
         enemyCar.destroy();
         this.lives--;
@@ -157,6 +194,7 @@ class GameScene extends Phaser.Scene {
             this.physics.pause();
             this.spawnTimer.paused = true;
             this.policeSpawnTimer.paused = true;
+            this.roadblockSpawnTimer.paused = true;
             this.scoreTimer.paused = true;
             this.scene.start('GameOverScene', { score: this.score });
         } else {
@@ -176,12 +214,10 @@ class GameScene extends Phaser.Scene {
         
         if (!this.isDragging) {
             this.car.body.setVelocity(0);
-            if (this.cursors.left.isDown && this.car.x > this.roadLeftBoundary) {
-                this.car.body.setVelocityX(-this.playerSpeed);
-            } else if (this.cursors.right.isDown && this.car.x < this.roadRightBoundary) {
-                this.car.body.setVelocityX(this.playerSpeed);
-            }
-            // --- UPDATED: Allow full vertical movement with a small buffer ---
+            if (this.cursors.left.isDown && this.car.x > this.roadLeftBoundary) { this.car.body.setVelocityX(-this.playerSpeed); }
+            else if (this.cursors.right.isDown && this.car.x < this.roadRightBoundary) { this.car.body.setVelocityX(this.playerSpeed); }
+            
+            // --- FIX 1: Allow full vertical movement ---
             if (this.cursors.up.isDown && this.car.y > 50) {
                 this.car.body.setVelocityY(-this.playerSpeed);
             } else if (this.cursors.down.isDown && this.car.y < 550) {
@@ -189,9 +225,19 @@ class GameScene extends Phaser.Scene {
             }
         }
 
+        // Cleanup
         this.enemyCars.getChildren().forEach(c => { if (c.y > 700) c.destroy(); });
         this.policeCars.getChildren().forEach(c => { if (c.y > 700) c.destroy(); });
         
+        // --- FIX 2: Manually move roadblocks to sync with the road ---
+        this.roadblocks.getChildren().forEach(roadblock => {
+            roadblock.y += this.roadSpeed; // Move down at the same speed as the road scrolls
+            if (roadblock.y > 700) {
+                roadblock.destroy();
+            }
+        });
+        
+        // Police AI
         this.policeCars.getChildren().forEach(policeCar => {
             if (policeCar.getData('isChasing')) {
                 if (policeCar.x > this.car.x + 10) { policeCar.body.setAccelerationX(-this.policeSpeed); }
@@ -201,7 +247,7 @@ class GameScene extends Phaser.Scene {
         });
     }
 }
-// --- THIS ENTIRE CLASS WAS MISSING ---
+
 class GameOverScene extends Phaser.Scene {
     constructor() {
         super('GameOverScene');
@@ -232,7 +278,6 @@ class GameOverScene extends Phaser.Scene {
     }
 }
 
-// --- THIS CONFIG OBJECT WAS MISSING ---
 const config = {
     type: Phaser.AUTO,
     width: 800,
@@ -252,7 +297,6 @@ const config = {
     scene: [StartScene, GameScene, GameOverScene]
 };
 
-// Create the game instance
 new Phaser.Game(config);
 
 </script>
