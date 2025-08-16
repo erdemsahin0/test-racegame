@@ -30,6 +30,7 @@ class StartScene extends Phaser.Scene {
 class GameScene extends Phaser.Scene {
     constructor() {
         super('GameScene');
+        // --- Existing Variables ---
         this.playerSpeed = 300;
         this.isDragging = false;
         this.score = 0;
@@ -41,6 +42,7 @@ class GameScene extends Phaser.Scene {
     }
 
     preload() {
+        // (This function is unchanged)
         this.load.image('road', 'assets/road.png');
         this.load.image('player_car_hero', 'assets/player_car_hero.png');
         this.load.image('enemy_car_green', 'assets/enemy_car_green.png');
@@ -50,11 +52,18 @@ class GameScene extends Phaser.Scene {
     }
 
     create() {
+        // --- UPDATED: Fine-tuned boundaries and new constants ---
+        // These values define the drivable area. You can tweak them to perfectly match your road.png
         this.roadLeftBoundary = 150;
         this.roadRightBoundary = 650;
+        this.intersectionYPositions = [150, 450]; // Y-coordinates of the side roads
+        this.playerMinY = 400; // The highest point the player's car can reach
+        this.playerMaxY = 550; // The lowest point the player's car can reach
         
+        // Reset variables on scene start
         this.lives = 3;
         this.score = 0;
+        // ... (rest of the variable resets are the same)
         this.isInvincible = false;
         this.roadSpeed = 4;
         this.enemySpeed = 150;
@@ -69,8 +78,9 @@ class GameScene extends Phaser.Scene {
         this.input.setDraggable(this.car);
         this.input.on('dragstart', () => { this.isDragging = true; });
         this.input.on('drag', (pointer, gameObject, dragX, dragY) => {
+            // UPDATED: Clamp both X and Y drag positions
             gameObject.x = Phaser.Math.Clamp(dragX, this.roadLeftBoundary, this.roadRightBoundary);
-            gameObject.y = dragY;
+            gameObject.y = Phaser.Math.Clamp(dragY, this.playerMinY, this.playerMaxY);
         });
         this.input.on('dragend', () => { this.isDragging = false; });
         
@@ -95,7 +105,6 @@ class GameScene extends Phaser.Scene {
         this.physics.add.overlap(this.car, this.policeCars, this.hitEnemy, null, this);
         
         this.cursors = this.input.keyboard.createCursorKeys();
-
         this.scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '32px', fill: '#fff', fontStyle: 'bold' });
         this.livesText = this.add.text(620, 16, 'Lives: 3', { fontSize: '32px', fill: '#fff', fontStyle: 'bold' });
 
@@ -108,17 +117,18 @@ class GameScene extends Phaser.Scene {
     }
 
     updateScore() {
+        // (This function is unchanged)
         this.score += 1;
         this.scoreText.setText('Score: ' + this.score);
         if (this.score > 0 && this.score % 200 === 0 && this.spawnDelay > 600) {
             this.roadSpeed += 0.5;
             this.enemySpeed += 20;
             this.spawnTimer.delay *= 0.95;
-            console.log(`SPEED UP! New spawn delay: ${this.spawnTimer.delay.toFixed(0)}ms`);
         }
     }
 
     spawnEnemyCar() {
+        // (This function is unchanged, but uses the updated boundaries)
         const x = Phaser.Math.Between(this.roadLeftBoundary, this.roadRightBoundary);
         const y = -50;
         const carTypes = ['enemy_car_green', 'enemy_car_yellow', 'enemy_car_blue_sky'];
@@ -129,33 +139,51 @@ class GameScene extends Phaser.Scene {
     }
 
     spawnPoliceCar() {
-        const corner = Phaser.Math.Between(0, 1);
-        let startX, turnToX;
-        if (corner === 0) {
-            startX = 60;
-            turnToX = this.roadLeftBoundary + 40;
-        } else {
-            startX = 740;
-            turnToX = this.roadRightBoundary - 40;
-        }
-        const policeCar = this.policeCars.create(startX, -50, 'enemy_car_police');
-        policeCar.body.setSize(70, 130);
-        policeCar.isChasing = false;
+        const side = Phaser.Math.RND.pick(['left', 'right']);
+        // UPDATED: Police car now spawns at one of the fixed intersection Y-coordinates
+        const yPos = Phaser.Math.RND.pick(this.intersectionYPositions);
 
+        let startX, driveOnToX, mergeToX;
+
+        if (side === 'left') {
+            startX = -50;
+            driveOnToX = 100;
+            mergeToX = this.roadLeftBoundary + 40;
+        } else {
+            startX = 850;
+            driveOnToX = 700;
+            mergeToX = this.roadRightBoundary - 40;
+        }
+
+        const policeCar = this.policeCars.create(startX, yPos, 'enemy_car_police');
+        policeCar.body.setSize(70, 130);
+        policeCar.setData('isChasing', false);
+
+        // Stage 1: Drive horizontally onto the screen
         this.tweens.add({
             targets: policeCar,
-            x: turnToX,
-            y: 150,
-            duration: 1500,
-            ease: 'Power2',
+            x: driveOnToX,
+            duration: 800,
+            ease: 'Power1',
             onComplete: () => {
-                policeCar.isChasing = true;
-                policeCar.setVelocityY(this.enemySpeed * 0.9);
+                // Stage 2: Turn and merge onto the road
+                this.tweens.add({
+                    targets: policeCar,
+                    x: mergeToX,
+                    y: policeCar.y + 150,
+                    duration: 1000,
+                    ease: 'Power1',
+                    onComplete: () => {
+                        policeCar.setData('isChasing', true);
+                        policeCar.setVelocityY(this.enemySpeed * 0.9);
+                    }
+                });
             }
         });
     }
 
     hitEnemy(player, enemyCar) {
+        // (This function is unchanged)
         if (this.isInvincible) return;
         enemyCar.destroy();
         this.lives--;
@@ -186,6 +214,7 @@ class GameScene extends Phaser.Scene {
     update() {
         this.road.tilePositionY -= this.roadSpeed;
         
+        // UPDATED: Player keyboard movement is now limited vertically
         if (!this.isDragging) {
             this.car.body.setVelocity(0);
             if (this.cursors.left.isDown && this.car.x > this.roadLeftBoundary) {
@@ -193,20 +222,23 @@ class GameScene extends Phaser.Scene {
             } else if (this.cursors.right.isDown && this.car.x < this.roadRightBoundary) {
                 this.car.body.setVelocityX(this.playerSpeed);
             }
-            if (this.cursors.up.isDown) this.car.body.setVelocityY(-this.playerSpeed);
-            else if (this.cursors.down.isDown) this.car.body.setVelocityY(this.playerSpeed);
+            if (this.cursors.up.isDown && this.car.y > this.playerMinY) {
+                this.car.body.setVelocityY(-this.playerSpeed);
+            } else if (this.cursors.down.isDown && this.car.y < this.playerMaxY) {
+                this.car.body.setVelocityY(this.playerSpeed);
+            }
         }
 
-        this.enemyCars.getChildren().forEach(c => { if (c.y > 650) c.destroy(); });
-        this.policeCars.getChildren().forEach(c => { if (c.y > 650) c.destroy(); });
+        this.enemyCars.getChildren().forEach(c => { if (c.y > 700) c.destroy(); });
+        this.policeCars.getChildren().forEach(c => { if (c.y > 700) c.destroy(); });
         
         this.policeCars.getChildren().forEach(policeCar => {
-            if (policeCar.isChasing) {
-                const chaseSpeed = 100;
-                if (policeCar.x > this.car.x && Math.abs(policeCar.x - this.car.x) > 10) {
-                    policeCar.body.setAccelerationX(-chaseSpeed);
-                } else if (policeCar.x < this.car.x && Math.abs(policeCar.x - this.car.x) > 10) {
-                    policeCar.body.setAccelerationX(chaseSpeed);
+            if (policeCar.getData('isChasing')) {
+                const chaseAcceleration = 200;
+                if (policeCar.x > this.car.x + 10) {
+                    policeCar.body.setAccelerationX(-chaseAcceleration);
+                } else if (policeCar.x < this.car.x - 10) {
+                    policeCar.body.setAccelerationX(chaseAcceleration);
                 } else {
                     policeCar.body.setAccelerationX(0);
                 }
@@ -214,7 +246,6 @@ class GameScene extends Phaser.Scene {
         });
     }
 }
-
 // --- THIS PART WAS MISSING ---
 class GameOverScene extends Phaser.Scene {
     constructor() {
