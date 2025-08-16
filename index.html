@@ -39,7 +39,7 @@ class GameScene extends Phaser.Scene {
     constructor() {
         super('GameScene');
         this.playerSpeed = 300;
-        this.isDragging = false; // The flag to track the drag state
+        this.isDragging = false;
     }
 
     preload() {
@@ -62,18 +62,15 @@ class GameScene extends Phaser.Scene {
         this.car.setInteractive();
         this.input.setDraggable(this.car);
 
-        // When a drag starts, set the flag to true
         this.input.on('dragstart', (pointer, gameObject) => {
             this.isDragging = true;
         });
 
-        // While dragging, update the sprite's position
         this.input.on('drag', (pointer, gameObject, dragX, dragY) => {
             gameObject.x = dragX;
             gameObject.y = dragY;
         });
 
-        // When the drag ends, set the flag to false
         this.input.on('dragend', (pointer, gameObject) => {
             this.isDragging = false;
         });
@@ -88,7 +85,9 @@ class GameScene extends Phaser.Scene {
             loop: true
         });
         this.physics.add.overlap(this.car, this.enemyCars, this.hitEnemy, null, this);
-        this.cursors = this.input.keyboard.createKeys();
+
+        // --- THIS LINE IS NOW FIXED ---
+        this.cursors = this.input.keyboard.createCursorKeys();
     }
 
     spawnEnemyCar() {
@@ -109,8 +108,6 @@ class GameScene extends Phaser.Scene {
     update() {
         this.road.tilePositionY -= 4;
 
-        // --- KEYBOARD CONTROLS NOW CHECK THE FLAG ---
-        // Only allow keyboard movement if the player is NOT dragging
         if (!this.isDragging) {
             this.car.body.setVelocity(0);
 
