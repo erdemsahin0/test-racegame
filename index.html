@@ -30,6 +30,7 @@ class StartScene extends Phaser.Scene {
 class GameScene extends Phaser.Scene {
     constructor() {
         super('GameScene');
+        // --- (All constructor variables are the same) ---
         this.playerSpeed = 300;
         this.isDragging = false;
         this.score = 0;
@@ -42,6 +43,7 @@ class GameScene extends Phaser.Scene {
     }
 
     preload() {
+        // (This function is unchanged)
         this.load.image('road', 'assets/road.png');
         this.load.image('player_car_hero', 'assets/player_car_hero.png');
         this.load.image('enemy_car_green', 'assets/enemy_car_green.png');
@@ -51,6 +53,7 @@ class GameScene extends Phaser.Scene {
     }
 
     create() {
+        // (This function is unchanged)
         this.roadLeftBoundary = 150;
         this.roadRightBoundary = 650;
         this.intersectionYPositions = [150, 450];
@@ -97,6 +100,7 @@ class GameScene extends Phaser.Scene {
     }
 
     updateScore() {
+        // (This function is unchanged)
         this.score += 1;
         this.scoreText.setText('Score: ' + this.score);
         if (this.score > 0 && this.score % 200 === 0 && this.spawnDelay > 600) {
@@ -108,6 +112,7 @@ class GameScene extends Phaser.Scene {
     }
 
     spawnEnemyCar() {
+        // (This function is unchanged)
         const x = Phaser.Math.Between(this.roadLeftBoundary, this.roadRightBoundary);
         const y = -50;
         const carTypes = ['enemy_car_green', 'enemy_car_yellow', 'enemy_car_blue_sky'];
@@ -118,6 +123,7 @@ class GameScene extends Phaser.Scene {
     }
 
     spawnPoliceCar() {
+        // (This function is unchanged)
         const side = Phaser.Math.RND.pick(['left', 'right']);
         const yPos = Phaser.Math.RND.pick(this.intersectionYPositions);
         let startX, driveOnToX, mergeToX;
@@ -126,7 +132,6 @@ class GameScene extends Phaser.Scene {
         const policeCar = this.policeCars.create(startX, yPos, 'enemy_car_police');
         policeCar.body.setSize(50, 120);
         policeCar.setData('isChasing', false);
-
         this.tweens.add({
             targets: policeCar, x: driveOnToX, duration: 800, ease: 'Power1',
             onComplete: () => {
@@ -143,6 +148,10 @@ class GameScene extends Phaser.Scene {
 
     hitEnemy(player, enemyCar) {
         if (this.isInvincible) return;
+
+        // --- NEW: Add Screen Shake on impact ---
+        this.cameras.main.shake(200, 0.01); // Shake for 200ms with an intensity of 0.01
+
         enemyCar.destroy();
         this.lives--;
         this.livesText.setText('Lives: ' + this.lives);
@@ -165,6 +174,7 @@ class GameScene extends Phaser.Scene {
     }
 
     update() {
+        // (This function is unchanged)
         this.road.tilePositionY -= this.roadSpeed;
         
         if (!this.isDragging) {
@@ -187,7 +197,6 @@ class GameScene extends Phaser.Scene {
         });
     }
 }
-
 // --- THIS ENTIRE CLASS WAS MISSING ---
 class GameOverScene extends Phaser.Scene {
     constructor() {
