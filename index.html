@@ -7,6 +7,7 @@
 </head>
 <body>
 <script>
+// SCENE 1: THE START SCREEN
 class StartScene extends Phaser.Scene {
     constructor() {
         super('StartScene');
@@ -14,18 +15,26 @@ class StartScene extends Phaser.Scene {
 
     create() {
         this.add.text(400, 200, 'Nitro Lane Rush', { fontSize: '48px', fill: '#fff' }).setOrigin(0.5);
-        this.add.text(400, 300, 'Press SPACE to Start', { fontSize: '24px', fill: '#fff' }).setOrigin(0.5);
+        
+        // Updated text for both desktop and mobile
+        this.add.text(400, 300, 'Press SPACE or Tap to Start', { fontSize: '24px', fill: '#fff' }).setOrigin(0.5);
 
-        // This is a crucial line for handling keyboard input
         this.game.canvas.setAttribute('tabindex', '0');
         this.game.canvas.focus();
 
+        // Keyboard input
         this.input.keyboard.once('keydown-SPACE', () => {
+            this.scene.start('GameScene');
+        });
+
+        // Touch/Tap input
+        this.input.on('pointerdown', () => {
             this.scene.start('GameScene');
         });
     }
 }
 
+// SCENE 2: THE MAIN GAME
 class GameScene extends Phaser.Scene {
     constructor() {
         super('GameScene');
@@ -33,7 +42,7 @@ class GameScene extends Phaser.Scene {
     }
 
     preload() {
-        // (This function remains exactly the same)
+        // Load all assets
         this.load.image('road', 'assets/road.png');
         this.load.image('player_car_hero', 'assets/player_car_hero.png');
         this.load.image('enemy_car_green', 'assets/enemy_car_green.png');
@@ -46,63 +55,59 @@ class GameScene extends Phaser.Scene {
         // Create a scrolling road background
         this.road = this.add.tileSprite(400, 300, 800, 600, 'road');
 
-        // Create the player's car as a physics sprite
+        // Create the player's car using ARCADE PHYSICS
         this.car = this.physics.add.sprite(400, 500, 'player_car_hero');
         this.car.setCollideWorldBounds(true);
-
-        // --- NEW: Shrink the player's hitbox ---
-        // We make the body smaller than the image to feel more accurate.
-        // setSize(width, height)
+        
+        // Shrink the player's hitbox to be more accurate
         this.car.body.setSize(60, 140);
 
-        // NEW: Renamed from 'roadblocks' to 'enemyCars' for clarity
+        // Create a physics group for enemy cars
         this.enemyCars = this.physics.add.group();
 
-        // A timed event to spawn a new enemy car every 1.5 seconds
+        // Spawn a new enemy car every 1.5 seconds
         this.time.addEvent({
             delay: 1500,
-            callback: this.spawnEnemyCar, // <-- Renamed function
+            callback: this.spawnEnemyCar,
             callbackScope: this,
             loop: true
         });
 
-        // The collision handler for the player and the enemy cars
+        // Add the collision handler between the player and enemies
         this.physics.add.overlap(this.car, this.enemyCars, this.hitEnemy, null, this);
 
         this.cursors = this.input.keyboard.createCursorKeys();
     }
 
-    // --- NEW: This function now spawns a random enemy car ---
     spawnEnemyCar() {
         const x = Phaser.Math.Between(100, 700);
         const y = -50;
-
-        // NEW: Create an array of enemy car keys to choose from
+        
         const carTypes = ['enemy_car_green', 'enemy_car_yellow', 'enemy_car_blue_sky'];
-        // Randomly pick one of the car types
         const randomCarKey = Phaser.Math.RND.pick(carTypes);
 
-        // Create an enemy car using the random key
         const enemyCar = this.enemyCars.create(x, y, randomCarKey);
         
-        // --- NEW: Shrink the enemy's hitbox ---
+        // Shrink the enemy's hitbox
         enemyCar.body.setSize(60, 110);
         
-        // Set a downward velocity
+        // Set its downward speed
         enemyCar.setVelocityY(150);
     }
 
-    // NEW: Renamed for clarity
     hitEnemy(player, enemyCar) {
         console.log('CRASH!');
         this.scene.restart();
     }
 
     update() {
+        // Scroll the road
         this.road.tilePositionY -= 4;
 
+        // Reset player's velocity
         this.car.body.setVelocity(0);
 
+        // Handle player movement with physics
         if (this.cursors.left.isDown) {
             this.car.body.setVelocityX(-this.playerSpeed);
         } else if (this.cursors.right.isDown) {
@@ -115,7 +120,7 @@ class GameScene extends Phaser.Scene {
             this.car.body.setVelocityY(this.playerSpeed);
         }
 
-        // Cleanup for enemy cars that go off-screen
+        // Clean up cars that have gone off-screen
         this.enemyCars.getChildren().forEach(enemyCar => {
             if (enemyCar.y > 650) {
                 enemyCar.destroy();
@@ -124,22 +129,29 @@ class GameScene extends Phaser.Scene {
     }
 }
 
+// THE GAME CONFIGURATION
 const config = {
     type: Phaser.AUTO,
     width: 800,
     height: 600,
     backgroundColor: '#222',
-    // ADD THIS PHYSICS BLOCK
+    // Enables the Arcade Physics engine
     physics: {
         default: 'arcade',
         arcade: {
-            gravity: { y: 0 }, // No gravity for a top-down game
-            debug: true // Set to true to see hitboxes
+            gravity: { y: 0 },
+            debug: false // Set to true to see hitboxes
         }
+    },
+    // Enables mobile-friendly scaling
+    scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH
     },
     scene: [StartScene, GameScene]
 };
 
+// Create the game instance
 new Phaser.Game(config);
 </script>
 </body>
