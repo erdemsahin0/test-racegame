@@ -39,6 +39,7 @@ class GameScene extends Phaser.Scene {
     constructor() {
         super('GameScene');
         this.playerSpeed = 300;
+        this.isDragging = false; // NEW: Flag to track dragging state
     }
 
     preload() {
@@ -62,6 +63,27 @@ class GameScene extends Phaser.Scene {
         // Shrink the player's hitbox to be more accurate
         this.car.body.setSize(60, 140);
 
+        // --- DRAG CONTROLS LOGIC ---
+        this.car.setInteractive();
+        this.input.setDraggable(this.car);
+
+        // NEW: Listen for when a drag starts and ends
+        this.input.on('dragstart', (pointer, gameObject) => {
+            this.isDragging = true;
+        });
+
+        this.input.on('drag', (pointer, gameObject, dragX, dragY) => {
+            gameObject.x = dragX;
+            gameObject.y = dragY;
+        });
+
+        this.input.on('dragend', (pointer, gameObject) => {
+            // We add a short delay to prevent the velocity from resetting instantly
+            setTimeout(() => { this.isDragging = false; }, 50);
+        });
+        
+        // --- END OF DRAG LOGIC ---
+
         // Create a physics group for enemy cars
         this.enemyCars = this.physics.add.group();
 
@@ -77,6 +99,8 @@ class GameScene extends Phaser.Scene {
         this.physics.add.overlap(this.car, this.enemyCars, this.hitEnemy, null, this);
 
         this.cursors = this.input.keyboard.createCursorKeys();
+        
+        // THE DUPLICATED CODE THAT WAS HERE IS NOW REMOVED
     }
 
     spawnEnemyCar() {
@@ -104,20 +128,23 @@ class GameScene extends Phaser.Scene {
         // Scroll the road
         this.road.tilePositionY -= 4;
 
-        // Reset player's velocity
-        this.car.body.setVelocity(0);
+        // --- NEW: Only handle arrow keys if NOT dragging ---
+        if (!this.isDragging) {
+            // Reset player's velocity
+            this.car.body.setVelocity(0);
 
-        // Handle player movement with physics
-        if (this.cursors.left.isDown) {
-            this.car.body.setVelocityX(-this.playerSpeed);
-        } else if (this.cursors.right.isDown) {
-            this.car.body.setVelocityX(this.playerSpeed);
-        }
+            // Handle player movement with physics
+            if (this.cursors.left.isDown) {
+                this.car.body.setVelocityX(-this.playerSpeed);
+            } else if (this.cursors.right.isDown) {
+                this.car.body.setVelocityX(this.playerSpeed);
+            }
 
-        if (this.cursors.up.isDown) {
-            this.car.body.setVelocityY(-this.playerSpeed);
-        } else if (this.cursors.down.isDown) {
-            this.car.body.setVelocityY(this.playerSpeed);
+            if (this.cursors.up.isDown) {
+                this.car.body.setVelocityY(-this.playerSpeed);
+            } else if (this.cursors.down.isDown) {
+                this.car.body.setVelocityY(this.playerSpeed);
+            }
         }
 
         // Clean up cars that have gone off-screen
