@@ -39,11 +39,11 @@ class GameScene extends Phaser.Scene {
     constructor() {
         super('GameScene');
         this.playerSpeed = 300;
-        this.isDragging = false; // NEW: Flag to track dragging state
+        this.isDragging = false; // The flag to track the drag state
     }
 
     preload() {
-        // Load all assets
+        // (This function is unchanged)
         this.load.image('road', 'assets/road.png');
         this.load.image('player_car_hero', 'assets/player_car_hero.png');
         this.load.image('enemy_car_green', 'assets/enemy_car_green.png');
@@ -53,69 +53,51 @@ class GameScene extends Phaser.Scene {
     }
 
     create() {
-        // Create a scrolling road background
         this.road = this.add.tileSprite(400, 300, 800, 600, 'road');
-
-        // Create the player's car using ARCADE PHYSICS
         this.car = this.physics.add.sprite(400, 500, 'player_car_hero');
         this.car.setCollideWorldBounds(true);
-        
-        // Shrink the player's hitbox to be more accurate
         this.car.body.setSize(60, 140);
 
-        // --- DRAG CONTROLS LOGIC ---
+        // --- DRAG CONTROLS USING THE 'isDragging' FLAG ---
         this.car.setInteractive();
         this.input.setDraggable(this.car);
 
-        // NEW: Listen for when a drag starts and ends
+        // When a drag starts, set the flag to true
         this.input.on('dragstart', (pointer, gameObject) => {
             this.isDragging = true;
         });
 
+        // While dragging, update the sprite's position
         this.input.on('drag', (pointer, gameObject, dragX, dragY) => {
             gameObject.x = dragX;
             gameObject.y = dragY;
         });
 
+        // When the drag ends, set the flag to false
         this.input.on('dragend', (pointer, gameObject) => {
-            // We add a short delay to prevent the velocity from resetting instantly
-            setTimeout(() => { this.isDragging = false; }, 50);
+            this.isDragging = false;
         });
         
         // --- END OF DRAG LOGIC ---
 
-        // Create a physics group for enemy cars
         this.enemyCars = this.physics.add.group();
-
-        // Spawn a new enemy car every 1.5 seconds
         this.time.addEvent({
             delay: 1500,
             callback: this.spawnEnemyCar,
             callbackScope: this,
             loop: true
         });
-
-        // Add the collision handler between the player and enemies
         this.physics.add.overlap(this.car, this.enemyCars, this.hitEnemy, null, this);
-
-        this.cursors = this.input.keyboard.createCursorKeys();
-        
-        // THE DUPLICATED CODE THAT WAS HERE IS NOW REMOVED
+        this.cursors = this.input.keyboard.createKeys();
     }
 
     spawnEnemyCar() {
         const x = Phaser.Math.Between(100, 700);
         const y = -50;
-        
         const carTypes = ['enemy_car_green', 'enemy_car_yellow', 'enemy_car_blue_sky'];
         const randomCarKey = Phaser.Math.RND.pick(carTypes);
-
         const enemyCar = this.enemyCars.create(x, y, randomCarKey);
-        
-        // Shrink the enemy's hitbox
         enemyCar.body.setSize(60, 110);
-        
-        // Set its downward speed
         enemyCar.setVelocityY(150);
     }
 
@@ -125,15 +107,13 @@ class GameScene extends Phaser.Scene {
     }
 
     update() {
-        // Scroll the road
         this.road.tilePositionY -= 4;
 
-        // --- NEW: Only handle arrow keys if NOT dragging ---
+        // --- KEYBOARD CONTROLS NOW CHECK THE FLAG ---
+        // Only allow keyboard movement if the player is NOT dragging
         if (!this.isDragging) {
-            // Reset player's velocity
             this.car.body.setVelocity(0);
 
-            // Handle player movement with physics
             if (this.cursors.left.isDown) {
                 this.car.body.setVelocityX(-this.playerSpeed);
             } else if (this.cursors.right.isDown) {
@@ -147,7 +127,6 @@ class GameScene extends Phaser.Scene {
             }
         }
 
-        // Clean up cars that have gone off-screen
         this.enemyCars.getChildren().forEach(enemyCar => {
             if (enemyCar.y > 650) {
                 enemyCar.destroy();
@@ -155,7 +134,6 @@ class GameScene extends Phaser.Scene {
         });
     }
 }
-
 // THE GAME CONFIGURATION
 const config = {
     type: Phaser.AUTO,
