@@ -1,10 +1,65 @@
 <!DOCTYPE html>
 <html>
+<!DOCTYPE html>
+<html>
 <head>
     <meta charset="UTF-8">
     <title>Nitro Lane Rush</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.js"></script>
 </head>
+<body>
+<script>
+class StartScene extends Phaser.Scene {
+    constructor() {
+        super('StartScene');
+    }
+
+    create() {
+        this.add.text(400, 200, 'Nitro Lane Rush', { fontSize: '48px', fill: '#fff' }).setOrigin(0.5);
+        this.add.text(400, 300, 'Press SPACE to Start', { fontSize: '24px', fill: '#fff' }).setOrigin(0.5);
+
+        // Make sure keyboard input works
+        this.game.canvas.setAttribute('tabindex', '0');
+        this.game.canvas.focus();
+
+        // Switch to GameScene when SPACE is pressed
+        this.input.keyboard.once('keydown-SPACE', () => {
+            this.scene.start('GameScene');
+        });
+    }
+}
+
+class GameScene extends Phaser.Scene {
+    constructor() {
+        super('GameScene');
+    }
+
+    preload() {
+        // Load assets here later (images, sounds, etc.)
+    }
+
+    create() {
+        this.add.text(400, 300, 'Game Started!', { fontSize: '32px', fill: '#fff' }).setOrigin(0.5);
+    }
+
+    update() {
+        // Main game loop logic goes here
+    }
+}
+
+const config = {
+    type: Phaser.AUTO,
+    width: 800,
+    height: 600,
+    backgroundColor: '#222',
+    scene: [StartScene, GameScene]
+};
+
+new Phaser.Game(config);
+</script>
+</body>
+</html>
+
 <body>
 <script>
 class StartScene extends Phaser.Scene {
