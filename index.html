@@ -38,9 +38,14 @@ class GameScene extends Phaser.Scene {
         this.roadSpeed = 4;
         this.enemySpeed = 150;
         this.spawnDelay = 1500;
+
+        // --- NEW: Lives and Invincibility ---
+        this.lives = 3;
+        this.isInvincible = false;
     }
 
     preload() {
+        // (This function is unchanged)
         this.load.image('road', 'assets/road.png');
         this.load.image('player_car_hero', 'assets/player_car_hero.png');
         this.load.image('enemy_car_green', 'assets/enemy_car_green.png');
@@ -50,8 +55,10 @@ class GameScene extends Phaser.Scene {
     }
 
     create() {
-        // Reset variables on scene start
+        // --- NEW: Reset lives and score when the scene starts ---
+        this.lives = 3;
         this.score = 0;
+        this.isInvincible = false;
         this.roadSpeed = 4;
         this.enemySpeed = 150;
         this.spawnDelay = 1500;
@@ -86,6 +93,14 @@ class GameScene extends Phaser.Scene {
             fill: '#fff',
             fontStyle: 'bold'
         });
+        
+        // --- NEW: LIVES DISPLAY ---
+        // Display the lives in the top-right corner
+        this.livesText = this.add.text(620, 16, 'Lives: 3', {
+            fontSize: '32px',
+            fill: '#fff',
+            fontStyle: 'bold'
+        });
 
         this.scoreTimer = this.time.addEvent({
             delay: 100,
@@ -117,11 +132,44 @@ class GameScene extends Phaser.Scene {
         enemyCar.setVelocityY(this.enemySpeed);
     }
 
+    // --- NEW: UPDATED CRASH LOGIC ---
     hitEnemy(player, enemyCar) {
-        this.physics.pause();
-        this.spawnTimer.paused = true;
-        this.scoreTimer.paused = true;
-        this.scene.start('GameOverScene', { score: this.score });
+        // If the player is already invincible, do nothing
+        if (this.isInvincible) {
+            return;
+        }
+
+        // We destroy the car that was hit
+        enemyCar.destroy();
+        
+        // Lose a life
+        this.lives--;
+        this.livesText.setText('Lives: ' + this.lives);
+
+        if (this.lives <= 0) {
+            // Game Over if no lives are left
+            this.physics.pause();
+            this.spawnTimer.paused = true;
+            this.scoreTimer.paused = true;
+            this.scene.start('GameOverScene', { score: this.score });
+        } else {
+            // Become temporarily invincible if lives are left
+            this.isInvincible = true;
+            
+            // A visual effect to show invincibility (blinking)
+            this.tweens.add({
+                targets: this.car,
+                alpha: 0.5,
+                duration: 200,
+                ease: 'Power1',
+                yoyo: true,
+                repeat: 5, // Blink 5 times
+                onComplete: () => {
+                    this.car.setAlpha(1);
+                    this.isInvincible = false;
+                }
+            });
+        }
     }
 
     update() {
@@ -140,7 +188,6 @@ class GameScene extends Phaser.Scene {
         });
     }
 }
-
 // SCENE 3: THE GAME OVER SCREEN
 class GameOverScene extends Phaser.Scene {
     constructor() {
