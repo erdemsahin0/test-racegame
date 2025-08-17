@@ -30,9 +30,7 @@ class StartScene extends Phaser.Scene {
 class GameScene extends Phaser.Scene {
     constructor() {
         super('GameScene');
-        // --- (All constructor variables are the same) ---
         this.playerSpeed = 300;
-        this.isDragging = false;
         this.score = 0;
         this.roadSpeed = 4;
         this.enemySpeed = 150;
@@ -40,25 +38,34 @@ class GameScene extends Phaser.Scene {
         this.lives = 3;
         this.isInvincible = false;
         this.policeSpeed = 100;
+        this.moveUp = false;
+        this.moveDown = false;
+        this.moveLeft = false;
+        this.moveRight = false;
     }
 
     preload() {
-        // (This function is unchanged)
-        this.load.image('road', 'assets/road.png');
+        // Load all assets, including buttons
+        this.load.image('road_lanes', 'assets/road_lanes.png');
+        this.load.image('shoulder_left', 'assets/shoulder_left.png');
+        this.load.image('shoulder_right', 'assets/shoulder_right.png');
         this.load.image('player_car_hero', 'assets/player_car_hero.png');
         this.load.image('enemy_car_green', 'assets/enemy_car_green.png');
         this.load.image('enemy_car_yellow', 'assets/enemy_car_yellow.png');
         this.load.image('enemy_car_blue_sky', 'assets/enemy_car_blue_sky.png');
         this.load.image('enemy_car_police', 'assets/enemy_car_police.png');
         this.load.image('obstacle_roadblock_a', 'assets/obstacle_roadblock_a.png');
+        this.load.image('button_up', 'assets/button_up.png');
+        this.load.image('button_down', 'assets/button_down.png');
+        this.load.image('button_left', 'assets/button_left.png');
+        this.load.image('button_right', 'assets/button_right.png');
     }
 
     create() {
-        this.roadLeftBoundary = 150;
-        this.roadRightBoundary = 650;
-        this.intersectionYPositions = [150, 450];
-        // --- FIX 1: Removed the playerMinY and playerMaxY variables ---
-        
+        // --- THIS FUNCTION IS NOW FULLY RESTORED ---
+        this.roadLeftBoundary = 120;
+        this.roadRightBoundary = 680;
+
         // Reset variables
         this.lives = 3;
         this.score = 0;
@@ -67,80 +74,126 @@ class GameScene extends Phaser.Scene {
         this.enemySpeed = 150;
         this.spawnDelay = 1500;
         this.policeSpeed = 100;
+        this.moveUp = false; this.moveDown = false; this.moveLeft = false; this.moveRight = false;
 
-        this.road = this.add.tileSprite(400, 300, 800, 600, 'road');
+        // Background
+        this.add.image(0, 0, 'shoulder_left').setOrigin(0, 0);
+        this.add.image(800, 0, 'shoulder_right').setOrigin(1, 0);
+        this.road = this.add.tileSprite(400, 300, 540, 600, 'road_lanes');
+
+        // Player Car
         this.car = this.physics.add.sprite(400, 500, 'player_car_hero');
         this.car.setCollideWorldBounds(true);
         this.car.body.setSize(45, 130);
-
-        this.car.setInteractive();
-        this.input.setDraggable(this.car);
-        this.input.on('dragstart', () => { this.isDragging = true; });
-        this.input.on('drag', (pointer, gameObject, dragX, dragY) => {
-            gameObject.x = Phaser.Math.Clamp(dragX, this.roadLeftBoundary, this.roadRightBoundary);
-            // --- FIX 1: Allow dragging across the full screen height (with a small buffer) ---
-            gameObject.y = Phaser.Math.Clamp(dragY, 50, 550);
-        });
-        this.input.on('dragend', () => { this.isDragging = false; });
         
+        // On-Screen Buttons
+        const buttonY = 500;
+        const buttonX_Left = 80;
+        const buttonX_Right = 200;
+        const leftButton = this.add.image(buttonX_Left, buttonY, 'button_left').setInteractive();
+        const rightButton = this.add.image(buttonX_Right, buttonY, 'button_right').setInteractive();
+        const upButton = this.add.image((buttonX_Left + buttonX_Right) / 2, buttonY - 60, 'button_up').setInteractive();
+        const downButton = this.add.image((buttonX_Left + buttonX_Right) / 2, buttonY + 60, 'button_down').setInteractive();
+        [leftButton, rightButton, upButton, downButton].forEach(button => {
+            button.setAlpha(0.7).setScrollFactor(0);
+        });
+
+        // Button press logic
+        leftButton.on('pointerdown', () => { this.moveLeft = true; });
+        leftButton.on('pointerup', () => { this.moveLeft = false; });
+        rightButton.on('pointerdown', () => { this.moveRight = true; });
+        rightButton.on('pointerup', () => { this.moveRight = false; });
+        upButton.on('pointerdown', () => { this.moveUp = true; });
+        upButton.on('pointerup', () => { this.moveUp = false; });
+        downButton.on('pointerdown', () => { this.moveDown = true; });
+        downButton.on('pointerup', () => { this.moveDown = false; });
+        
+        this.input.on('pointerup', () => {
+            this.moveLeft = false; this.moveRight = false; this.moveUp = false; this.moveDown = false;
+        });
+
+        // Enemy and Obstacle Setup
         this.enemyCars = this.physics.add.group();
         this.policeCars = this.physics.add.group();
         this.roadblocks = this.physics.add.group();
-
         this.spawnTimer = this.time.addEvent({ delay: this.spawnDelay, callback: this.spawnEnemyCar, callbackScope: this, loop: true });
         this.policeSpawnTimer = this.time.addEvent({ delay: 8000, callback: this.spawnPoliceCar, callbackScope: this, loop: true });
-        this.roadblockSpawnTimer = this.time.addEvent({
-            delay: 4000,
-            callback: this.spawnRoadblock,
-            callbackScope: this,
-            loop: true,
-            paused: true
-        });
+        this.roadblockSpawnTimer = this.time.addEvent({ delay: 4000, callback: this.spawnRoadblock, callbackScope: this, loop: true, paused: true });
 
+        // Collision Handlers
         this.physics.add.overlap(this.car, this.enemyCars, this.hitEnemy, null, this);
         this.physics.add.overlap(this.car, this.policeCars, this.hitEnemy, null, this);
         this.physics.add.collider(this.policeCars, this.enemyCars);
         this.physics.add.collider(this.policeCars, this.policeCars);
         this.physics.add.overlap(this.car, this.roadblocks, this.hitRoadblock, null, this);
         
+        // Keyboard and UI setup
         this.cursors = this.input.keyboard.createCursorKeys();
         this.scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '32px', fill: '#fff', fontStyle: 'bold' });
         this.livesText = this.add.text(620, 16, 'Lives: 3', { fontSize: '32px', fill: '#fff', fontStyle: 'bold' });
         this.scoreTimer = this.time.addEvent({ delay: 100, callback: this.updateScore, callbackScope: this, loop: true });
     }
 
+    update() {
+        this.road.tilePositionY -= this.roadSpeed;
+        
+        this.car.body.setVelocity(0);
+        
+        if ((this.cursors.left.isDown || this.moveLeft) && this.car.x > this.roadLeftBoundary) {
+            this.car.body.setVelocityX(-this.playerSpeed);
+        } else if ((this.cursors.right.isDown || this.moveRight) && this.car.x < this.roadRightBoundary) {
+            this.car.body.setVelocityX(this.playerSpeed);
+        }
+
+        if ((this.cursors.up.isDown || this.moveUp) && this.car.y > 50) {
+            this.car.body.setVelocityY(-this.playerSpeed);
+        } else if ((this.cursors.down.isDown || this.moveDown) && this.car.y < 550) {
+            this.car.body.setVelocityY(this.playerSpeed);
+        }
+
+        this.enemyCars.getChildren().forEach(c => { if (c.y > 700) c.destroy(); });
+        this.policeCars.getChildren().forEach(c => { if (c.y > 700) c.destroy(); });
+        this.roadblocks.getChildren().forEach(roadblock => {
+            roadblock.y += this.roadSpeed;
+            if (roadblock.y > 700) {
+                roadblock.destroy();
+            }
+        });
+        
+        this.policeCars.getChildren().forEach(policeCar => {
+            if (policeCar.getData('isChasing')) {
+                if (policeCar.x > this.car.x + 10) { policeCar.body.setAccelerationX(-this.policeSpeed); }
+                else if (policeCar.x < this.car.x - 10) { policeCar.body.setAccelerationX(this.policeSpeed); }
+                else { policeCar.body.setAccelerationX(0); }
+            }
+        });
+    }
+    
+    // (All other functions are below and unchanged)
     updateScore() {
         this.score += 1;
         this.scoreText.setText('Score: ' + this.score);
-        
         if (this.score > 0 && this.score % 200 === 0 && this.spawnDelay > 600) {
             this.roadSpeed += 0.5;
             this.enemySpeed += 20;
             this.policeSpeed += 25;
             this.spawnTimer.delay *= 0.95;
-            
             if (!this.roadblockSpawnTimer.paused && this.roadblockSpawnTimer.delay > 1500) {
                 this.roadblockSpawnTimer.delay *= 0.95;
             }
         }
-        
-        // --- FIX 3: Activate roadblocks after score reaches 500 ---
         if (this.score >= 500 && this.roadblockSpawnTimer.paused) {
             this.roadblockSpawnTimer.paused = false;
             console.log("ROADBLOCKS ACTIVATED!");
         }
     }
-    
     spawnRoadblock() {
         const x = Phaser.Math.Between(this.roadLeftBoundary, this.roadRightBoundary);
         const y = -50;
         const roadblock = this.roadblocks.create(x, y, 'obstacle_roadblock_a');
         roadblock.setScale(2);
         roadblock.body.setSize(roadblock.width * 0.8, roadblock.height * 0.8);
-        // --- FIX 2: Roadblocks no longer have their own velocity ---
-        // They will be moved manually in the update() loop
     }
-    
     hitRoadblock(player, roadblock) {
         if (this.isInvincible) return;
         console.log('CRASH! Hit a roadblock.');
@@ -151,7 +204,6 @@ class GameScene extends Phaser.Scene {
         this.scoreTimer.paused = true;
         this.scene.start('GameOverScene', { score: this.score });
     }
-
     spawnEnemyCar() {
         const x = Phaser.Math.Between(this.roadLeftBoundary, this.roadRightBoundary);
         const y = -50;
@@ -161,14 +213,14 @@ class GameScene extends Phaser.Scene {
         enemyCar.body.setSize(45, 100);
         enemyCar.setVelocityY(this.enemySpeed);
     }
-
     spawnPoliceCar() {
         const side = Phaser.Math.RND.pick(['left', 'right']);
-        const yPos = Phaser.Math.RND.pick(this.intersectionYPositions);
+        const yPos = [150, 450]; // Simplified from this.intersectionYPositions
+        const randomY = Phaser.Math.RND.pick(yPos);
         let startX, driveOnToX, mergeToX;
         if (side === 'left') { startX = -50; driveOnToX = 100; mergeToX = this.roadLeftBoundary + 40; } 
         else { startX = 850; driveOnToX = 700; mergeToX = this.roadRightBoundary - 40; }
-        const policeCar = this.policeCars.create(startX, yPos, 'enemy_car_police');
+        const policeCar = this.policeCars.create(startX, randomY, 'enemy_car_police');
         policeCar.body.setSize(50, 120);
         policeCar.setData('isChasing', false);
         this.tweens.add({
@@ -184,7 +236,6 @@ class GameScene extends Phaser.Scene {
             }
         });
     }
-
     hitEnemy(player, enemyCar) {
         if (this.isInvincible) return;
         enemyCar.destroy();
@@ -208,44 +259,6 @@ class GameScene extends Phaser.Scene {
             });
         }
     }
-
-    update() {
-        this.road.tilePositionY -= this.roadSpeed;
-        
-        if (!this.isDragging) {
-            this.car.body.setVelocity(0);
-            if (this.cursors.left.isDown && this.car.x > this.roadLeftBoundary) { this.car.body.setVelocityX(-this.playerSpeed); }
-            else if (this.cursors.right.isDown && this.car.x < this.roadRightBoundary) { this.car.body.setVelocityX(this.playerSpeed); }
-            
-            // --- FIX 1: Allow full vertical movement ---
-            if (this.cursors.up.isDown && this.car.y > 50) {
-                this.car.body.setVelocityY(-this.playerSpeed);
-            } else if (this.cursors.down.isDown && this.car.y < 550) {
-                this.car.body.setVelocityY(this.playerSpeed);
-            }
-        }
-
-        // Cleanup
-        this.enemyCars.getChildren().forEach(c => { if (c.y > 700) c.destroy(); });
-        this.policeCars.getChildren().forEach(c => { if (c.y > 700) c.destroy(); });
-        
-        // --- FIX 2: Manually move roadblocks to sync with the road ---
-        this.roadblocks.getChildren().forEach(roadblock => {
-            roadblock.y += this.roadSpeed; // Move down at the same speed as the road scrolls
-            if (roadblock.y > 700) {
-                roadblock.destroy();
-            }
-        });
-        
-        // Police AI
-        this.policeCars.getChildren().forEach(policeCar => {
-            if (policeCar.getData('isChasing')) {
-                if (policeCar.x > this.car.x + 10) { policeCar.body.setAccelerationX(-this.policeSpeed); }
-                else if (policeCar.x < this.car.x - 10) { policeCar.body.setAccelerationX(this.policeSpeed); }
-                else { policeCar.body.setAccelerationX(0); }
-            }
-        });
-    }
 }
 
 class GameOverScene extends Phaser.Scene {
@@ -256,19 +269,9 @@ class GameOverScene extends Phaser.Scene {
         this.finalScore = data.score;
     }
     create() {
-        this.add.text(400, 200, 'GAME OVER', { 
-            fontSize: '64px', 
-            fill: '#ff0000',
-            fontStyle: 'bold' 
-        }).setOrigin(0.5);
-        this.add.text(400, 300, 'Your Score: ' + this.finalScore, { 
-            fontSize: '32px', 
-            fill: '#fff' 
-        }).setOrigin(0.5);
-        this.add.text(400, 400, 'Tap or Press SPACE to Restart', { 
-            fontSize: '24px', 
-            fill: '#fff' 
-        }).setOrigin(0.5);
+        this.add.text(400, 200, 'GAME OVER', { fontSize: '64px', fill: '#ff0000', fontStyle: 'bold' }).setOrigin(0.5);
+        this.add.text(400, 300, 'Your Score: ' + this.finalScore, { fontSize: '32px', fill: '#fff' }).setOrigin(0.5);
+        this.add.text(400, 400, 'Tap or Press SPACE to Restart', { fontSize: '24px', fill: '#fff' }).setOrigin(0.5);
         this.input.keyboard.once('keydown-SPACE', () => {
             this.scene.start('GameScene');
         });
