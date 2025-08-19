@@ -202,6 +202,7 @@ class GameScene extends Phaser.Scene {
         this.enemyCarPool = [];
         this.policeCarPool = [];
         this.roadblockPool = [];
+        this.nitroPickupPool = [];
         this.maxPoolSize = 20;
 
         // Animation and effects
@@ -364,7 +365,7 @@ class GameScene extends Phaser.Scene {
             callbackScope: this, 
             loop: true 
         });
-        this.tipTimer = this.time.addEvent({ // New tip timer
+        this.tipTimer = this.time.addEvent({
             delay: 8000,
             callback: this.showNextTip,
             callbackScope: this,
@@ -484,6 +485,9 @@ class GameScene extends Phaser.Scene {
         
         // Show first tip
         this.showNextTip();
+        
+        // Update nitro bar initially
+        this.updateNitroBar();
     }
 
     createParticleSystem() {
@@ -560,6 +564,28 @@ class GameScene extends Phaser.Scene {
             powerUp.setActive(false).setVisible(false);
             powerUp.setScale(1.5);
             this.powerUps.add(powerUp);
+        }
+        
+        // Pre-create nitro pickups with proper initialization
+        for (let i = 0; i < 5; i++) {
+            // Create nitro pickup graphic if not exists
+            if (!this.textures.exists('nitro_pickup')) {
+                const nitroGraphics = this.add.graphics();
+                nitroGraphics.fillStyle(0x00AAFF);
+                nitroGraphics.fillCircle(0, 0, 12);
+                nitroGraphics.fillStyle(0xFFFFFF);
+                nitroGraphics.fillCircle(0, 0, 8);
+                nitroGraphics.fillStyle(0x00AAFF);
+                nitroGraphics.fillCircle(0, 0, 4);
+                nitroGraphics.generateTexture('nitro_pickup', 24, 24);
+                nitroGraphics.destroy();
+            }
+            
+            const nitroPickup = this.physics.add.sprite(-100, -100, 'nitro_pickup');
+            nitroPickup.setActive(false).setVisible(false);
+            nitroPickup.setScale(1.5);
+            this.nitroPickupPool.push(nitroPickup);
+            this.nitroPickups.add(nitroPickup);
         }
     }
 
@@ -796,19 +822,21 @@ class GameScene extends Phaser.Scene {
             nitroGraphics.destroy();
         }
         
-        const x = Phaser.Math.Between(this.roadLeftBoundary + 20, this.roadRightBoundary - 20);
-        const nitroPickup = this.nitroPickups.create(x, -50, 'nitro_pickup');
-        nitroPickup.setScale(1.5);
-        nitroPickup.setVelocityY(80);
-        
-        // Add pulsing effect
-        this.tweens.add({
-            targets: nitroPickup,
-            scale: 2,
-            duration: 800,
-            ease: 'Sine.easeInOut',
-            yoyo: true,
-            repeat: -1
+        const nitroPickup = this.getFromPool(this.nitroPickupPool, (obj) => {
+            const x = Phaser.Math.Between(this.roadLeftBoundary + 20, this.roadRightBoundary - 20);
+            obj.setPosition(x, -50);
+            obj.setScale(1.5);
+            obj.setVelocityY(80);
+            
+            // Add pulsing effect
+            this.tweens.add({
+                targets: obj,
+                scale: 2,
+                duration: 800,
+                ease: 'Sine.easeInOut',
+                yoyo: true,
+                repeat: -1
+            });
         });
     }
     
@@ -844,18 +872,44 @@ class GameScene extends Phaser.Scene {
     }
     
     collectNitro(player, nitroPickup) {
-        nitroPickup.destroy();
+        // Properly return to pool instead of destroying
+        this.returnNitroToPool(nitroPickup);
         this.sound.play('sfx_powerup', { volume: this.sfxVolume });
         
         // Refill nitro
         this.nitroBoost = Math.min(this.nitroBoost + 30, 100);
         this.updateNitroBar();
+        
+        // Visual feedback for collecting nitro
+        const collectEffect = this.add.text(nitroPickup.x, nitroPickup.y, '+30 NITRO', {
+            fontSize: '20px',
+            fill: '#00AAFF',
+            fontStyle: 'bold',
+            stroke: '#000',
+            strokeThickness: 2
+        }).setOrigin(0.5);
+        
+        this.tweens.add({
+            targets: collectEffect,
+            y: nitroPickup.y - 50,
+            alpha: 0,
+            duration: 1000,
+            ease: 'Power2.easeOut',
+            onComplete: () => collectEffect.destroy()
+        });
     }
     
     updateNitroBar() {
         const width = 200 * (this.nitroBoost / 100);
         this.nitroBar.width = width;
         this.nitroText.setText(`NITRO: ${Math.floor(this.nitroBoost)}%`);
+        
+        // Visual feedback when nitro is low
+        if (this.nitroBoost < 20) {
+            this.nitroBar.setFillStyle(0xFF0000);
+        } else {
+            this.nitroBar.setFillStyle(0x00AAFF);
+        }
     }
     
     activateNitro() {
@@ -1465,6 +1519,14 @@ class GameScene extends Phaser.Scene {
             object.setData('isChasing', false);
         }
     }
+    
+    returnNitroToPool(object) {
+        object.setActive(false).setVisible(false);
+        object.body.setVelocity(0, 0);
+        object.setPosition(-100, -100);
+        object.setScale(1.5); // Reset to default scale
+        object.setAlpha(1); // Reset alpha
+    }
 
     update() {
         if (this.isPaused) return;
@@ -1494,7 +1556,7 @@ class GameScene extends Phaser.Scene {
                         0x00AAFF
                     ).setAlpha(0.7);
                 }
-            } else if (this.isUsingNitro) {
+            } else if (this.isUsingNitro && this.nitroBoost <= 0) {
                 this.deactivateNitro();
             }
             
@@ -1522,7 +1584,7 @@ class GameScene extends Phaser.Scene {
                 this.exhaustEmitter.setFrequency(this.isUsingNitro ? 100 : 100);
             }
             
-            // Nitro activation (Shift key or double tap)
+            // Nitro activation (Shift key)
             if (this.cursors.shift.isDown && this.nitroBoost > 0) {
                 this.activateNitro();
             } else if (this.cursors.shift.isUp && this.isUsingNitro) {
@@ -1539,16 +1601,17 @@ class GameScene extends Phaser.Scene {
         // Update police car light animations
         this.updatePoliceEffects();
         
-        // Update power-ups and nitro pickups
+        // Update power-ups
         this.powerUps.children.entries.forEach(powerUp => {
             if (powerUp.active && powerUp.y > 650) {
                 powerUp.destroy();
             }
         });
         
+        // Update nitro pickups
         this.nitroPickups.children.entries.forEach(nitroPickup => {
             if (nitroPickup.active && nitroPickup.y > 650) {
-                nitroPickup.destroy();
+                this.returnNitroToPool(nitroPickup);
             }
         });
     }
@@ -1592,6 +1655,16 @@ class GameScene extends Phaser.Scene {
                 roadblock.y += this.roadSpeed;
                 if (roadblock.y > 650) {
                     this.returnToPool(roadblock);
+                }
+            }
+        });
+        
+        // Clean up nitro pickups
+        this.nitroPickups.children.entries.forEach(nitroPickup => {
+            if (nitroPickup.active) {
+                nitroPickup.y += this.roadSpeed;
+                if (nitroPickup.y > 650) {
+                    this.returnNitroToPool(nitroPickup);
                 }
             }
         });
