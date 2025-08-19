@@ -58,19 +58,6 @@ class AssetManager {
             g.generateTexture('powerup_shield', 30, 30);
             g.destroy();
         }
-        
-        // Create nitro pickup texture safely
-        if (!scene.textures.exists('nitro_pickup')) {
-            const g = scene.add.graphics();
-            g.fillStyle(0x00AAFF);
-            g.fillCircle(0, 0, 12);
-            g.fillStyle(0xFFFFFF);
-            g.fillCircle(0, 0, 8);
-            g.fillStyle(0x00AAFF);
-            g.fillCircle(0, 0, 4);
-            g.generateTexture('nitro_pickup', 24, 24);
-            g.destroy();
-        }
     }
 }
 
@@ -133,7 +120,7 @@ class StartScene extends Phaser.Scene {
     }
 }
 
-// GAME SCENE WITH SAFE CRASH EFFECTS
+// GAME SCENE WITHOUT NITRO - HARDER GAMEPLAY WITH ROADBLOCKS AND MUTE BUTTON
 class GameScene extends Phaser.Scene {
     constructor() {
         super('GameScene');
@@ -152,24 +139,25 @@ class GameScene extends Phaser.Scene {
         this.policeSpeed = 100;
         this.currentTrackIndex = 0;
         this.streak = 0;
-        this.nitroBoost = 100;
-        this.isUsingNitro = false;
         this.comboMultiplier = 1;
         this.comboTimer = 0;
         this.isPaused = false;
         this.musicVolume = 0.5;
         this.sfxVolume = 0.7;
+        this.isMuted = false;
+        this.difficultyLevel = 1;
+        this.roadblockFrequency = 4000; // Initial roadblock spawn delay
         
         // Minimal pools for performance
         this.enemyCarPool = [];
         this.policeCarPool = [];
         this.roadblockPool = [];
-        this.nitroPickupPool = [];
-        this.powerUpPool = [];
         this.maxPoolSize = 10;
         
         // Effect management
         this.activeEffects = [];
+        this.pauseMenu = null;
+        this.muteButton = null;
     }
 
     preload() {
@@ -190,7 +178,6 @@ class GameScene extends Phaser.Scene {
         this.load.audio('music_4', 'assets/music_4.mp3');
         this.load.audio('sfx_crash', 'assets/crash.mp3');
         this.load.audio('sfx_powerup', 'assets/powerup.mp3');
-        this.load.audio('sfx_nitro', 'assets/nitro.mp3');
         
         this.load.once('complete', () => {
             AssetManager.createTextures(this);
@@ -229,8 +216,6 @@ class GameScene extends Phaser.Scene {
         this.enemyCars = this.physics.add.group();
         this.policeCars = this.physics.add.group();
         this.roadblocks = this.physics.add.group();
-        this.powerUps = this.physics.add.group();
-        this.nitroPickups = this.physics.add.group();
         
         this.initializeMinimalPools();
         
@@ -239,39 +224,49 @@ class GameScene extends Phaser.Scene {
             callback: this.spawnEnemyCar, callbackScope: this, loop: true });
         this.policeSpawnTimer = this.time.addEvent({ delay: 8000, 
             callback: this.spawnPoliceCar, callbackScope: this, loop: true });
-        this.roadblockSpawnTimer = this.time.addEvent({ delay: 4000, 
+        this.roadblockSpawnTimer = this.time.addEvent({ delay: this.roadblockFrequency, 
             callback: this.spawnRoadblock, callbackScope: this, loop: true, paused: true });
-        this.powerUpSpawnTimer = this.time.addEvent({ delay: 15000, 
-            callback: this.spawnPowerUp, callbackScope: this, loop: true });
-        this.nitroPickupSpawnTimer = this.time.addEvent({ delay: 20000, 
-            callback: this.spawnNitroPickup, callbackScope: this, loop: true });
 
         // Collisions
         this.physics.add.overlap(this.car, this.enemyCars, this.hitEnemy, null, this);
         this.physics.add.overlap(this.car, this.policeCars, this.hitEnemy, null, this);
         this.physics.add.overlap(this.car, this.roadblocks, this.hitRoadblock, null, this);
-        this.physics.add.overlap(this.car, this.powerUps, this.collectPowerUp, null, this);
-        this.physics.add.overlap(this.car, this.nitroPickups, this.collectNitro, null, this);
         
-        // UI
+        // UI - IMPROVED LAYOUT
         this.cursors = this.input.keyboard.createCursorKeys();
+        
+        // Top UI - separated to avoid overlap
         this.scoreText = this.add.text(16, 16, 'Score: 0', { 
             fontSize: '32px', fill: '#fff', fontStyle: 'bold',
             stroke: '#000', strokeThickness: 2
         });
-        this.livesText = this.add.text(620, 16, 'Lives: 3', { 
+        
+        // Lives on the left
+        this.livesText = this.add.text(16, 56, 'Lives: 3', { 
             fontSize: '32px', fill: '#fff', fontStyle: 'bold',
             stroke: '#000', strokeThickness: 2
         });
         
-        // Nitro UI
-        this.nitroBarBg = this.add.rectangle(16, 90, 200, 20, 0x333333);
-        this.nitroBarBg.setOrigin(0, 0);
-        this.nitroBar = this.add.rectangle(16, 90, 200, 20, 0x00AAFF);
-        this.nitroBar.setOrigin(0, 0);
-        this.nitroText = this.add.text(16, 90, 'NITRO: 100%', { 
-            fontSize: '16px', fill: '#fff', stroke: '#000', strokeThickness: 1
-        }).setOrigin(0, 0);
+        // Pause button on the far right
+        this.pauseButton = this.add.text(780, 16, '||', { 
+            fontSize: '28px', 
+            fill: '#fff',
+            fontStyle: 'bold',
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            padding: { left: 12, right: 12, top: 8, bottom: 8 }
+        }).setOrigin(1, 0);
+        this.pauseButton.setInteractive();
+        this.pauseButton.on('pointerdown', () => this.togglePause());
+
+        // Mute button below pause button
+        this.muteButton = this.add.text(780, 60, '🔇', { 
+            fontSize: '24px', 
+            fill: '#fff',
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            padding: { left: 10, right: 10, top: 5, bottom: 5 }
+        }).setOrigin(1, 0);
+        this.muteButton.setInteractive();
+        this.muteButton.on('pointerdown', () => this.toggleMute());
 
         // Particle systems (safe versions)
         this.createSafeParticles();
@@ -292,20 +287,6 @@ class GameScene extends Phaser.Scene {
             maxParticles: 20
         });
         this.exhaustEmitter.startFollow(this.car, 0, 30);
-        
-        // Nitro particles (limited)
-        this.nitroEmitter = this.add.particles(0, 0, 'particle', {
-            speed: { min: 100, max: 200 },
-            scale: { start: 0.5, end: 0 },
-            alpha: { start: 1, end: 0 },
-            lifespan: 200,
-            frequency: 100,
-            tint: 0x00AAFF,
-            blendMode: 'ADD',
-            maxParticles: 15
-        });
-        this.nitroEmitter.stop();
-        this.nitroEmitter.startFollow(this.car, 0, 30);
     }
 
     initializeMinimalPools() {
@@ -333,25 +314,10 @@ class GameScene extends Phaser.Scene {
             const roadblock = this.physics.add.sprite(-100, -100, 'obstacle_roadblock_a');
             roadblock.setActive(false).setVisible(false);
             roadblock.setScale(2);
-            roadblock.body.setSize(roadblock.width * 0.8, roadblock.height * 0.8);
+            roadblock.body.setSize(roadblock.width * 0.6, roadblock.height * 0.6); // Smaller hitbox
+            roadblock.setImmovable(true); // Makes roadblocks immovable
             this.roadblockPool.push(roadblock);
             this.roadblocks.add(roadblock);
-        }
-        
-        for (let i = 0; i < 5; i++) {
-            const powerUp = this.physics.add.sprite(-100, -100, 'powerup_shield');
-            powerUp.setActive(false).setVisible(false);
-            powerUp.setScale(1.5);
-            this.powerUpPool.push(powerUp);
-            this.powerUps.add(powerUp);
-        }
-        
-        for (let i = 0; i < 5; i++) {
-            const nitroPickup = this.physics.add.sprite(-100, -100, 'nitro_pickup');
-            nitroPickup.setActive(false).setVisible(false);
-            nitroPickup.setScale(1.5);
-            this.nitroPickupPool.push(nitroPickup);
-            this.nitroPickups.add(nitroPickup);
         }
     }
 
@@ -360,7 +326,7 @@ class GameScene extends Phaser.Scene {
             this.currentTrackIndex = 0;
         }
         const trackKey = this.musicPlaylist[this.currentTrackIndex];
-        this.currentMusic = this.sound.add(trackKey, { volume: this.musicVolume });
+        this.currentMusic = this.sound.add(trackKey, { volume: this.isMuted ? 0 : this.musicVolume });
         this.currentMusic.play();
         this.currentTrackIndex++;
         this.currentMusic.on('complete', this.playNextTrack, this);
@@ -377,20 +343,68 @@ class GameScene extends Phaser.Scene {
             }
         }
         
-        if (this.score > 0 && this.score % 200 === 0 && this.spawnDelay > 600) {
-            this.roadSpeed = Math.min(this.roadSpeed + 0.3, 8);
-            this.enemySpeed = Math.min(this.enemySpeed + 15, 300);
-            this.policeSpeed = Math.min(this.policeSpeed + 20, 200);
-            this.spawnTimer.delay = Math.max(this.spawnTimer.delay * 0.96, 400);
-            
-            if (!this.roadblockSpawnTimer.paused && this.roadblockSpawnTimer.delay > 1500) {
-                this.roadblockSpawnTimer.delay = Math.max(this.roadblockSpawnTimer.delay * 0.96, 1000);
-            }
+        // Increase difficulty based on score
+        if (this.score > 0 && this.score % 200 === 0) {
+            this.difficultyLevel++;
+            this.increaseDifficulty();
         }
         
+        // Activate roadblocks at score 500
         if (this.score >= 500 && this.roadblockSpawnTimer.paused) {
             this.roadblockSpawnTimer.paused = false;
+            // Show roadblock warning
+            const warningText = this.add.text(400, 300, 'ROADBLOCKS AHEAD!', {
+                fontSize: '36px',
+                fill: '#FF0000',
+                fontStyle: 'bold',
+                stroke: '#000',
+                strokeThickness: 3
+            }).setOrigin(0.5);
+
+            this.tweens.add({
+                targets: warningText,
+                alpha: 0,
+                y: 200,
+                duration: 2000,
+                ease: 'Power2.easeOut',
+                onComplete: () => warningText.destroy()
+            });
         }
+    }
+    
+    increaseDifficulty() {
+        // Make everything faster and more challenging
+        this.roadSpeed = Math.min(this.roadSpeed + 0.5, 12);
+        this.enemySpeed = Math.min(this.enemySpeed + 20, 400);
+        this.policeSpeed = Math.min(this.policeSpeed + 25, 300);
+        
+        // Decrease spawn delays
+        this.spawnTimer.delay = Math.max(this.spawnTimer.delay * 0.92, 300);
+        this.policeSpawnTimer.delay = Math.max(this.policeSpawnTimer.delay * 0.95, 2000);
+        
+        // Increase roadblock frequency
+        if (!this.roadblockSpawnTimer.paused) {
+            this.roadblockFrequency = Math.max(this.roadblockFrequency * 0.85, 800);
+            this.roadblockSpawnTimer.delay = this.roadblockFrequency;
+        }
+        
+        // Visual feedback for difficulty increase
+        const difficultyText = this.add.text(400, 300, `LEVEL ${this.difficultyLevel}!`, {
+            fontSize: '48px',
+            fill: '#FF6600',
+            fontStyle: 'bold',
+            stroke: '#000',
+            strokeThickness: 3
+        }).setOrigin(0.5);
+        
+        this.tweens.add({
+            targets: difficultyText,
+            alpha: 0,
+            y: 200,
+            duration: 1500,
+            ease: 'Power2.easeOut',
+            onComplete: () => difficultyText.destroy()
+        });
     }
     
     spawnRoadblock() {
@@ -398,67 +412,63 @@ class GameScene extends Phaser.Scene {
             const x = Phaser.Math.Between(120, 680);
             obj.setPosition(x, -50);
             obj.setScale(2);
+            // Fixed position - only moves with road speed
+            obj.setVelocityY(this.roadSpeed * 60); // Sync with road movement
+            obj.setImmovable(true); // Makes the roadblock immovable on collision
         });
     }
     
-    spawnPowerUp() {
-        const powerUp = this.getFromPool(this.powerUpPool, (obj) => {
-            const x = Phaser.Math.Between(140, 660);
-            obj.setPosition(x, -50);
-            obj.setTexture('powerup_shield');
-            obj.setScale(1.5);
-            obj.setVelocityY(100);
+    spawnEnemyCar() {
+        const enemyCar = this.getFromPool(this.enemyCarPool, (car) => {
+            const x = Phaser.Math.Between(120, 680);
+            car.setPosition(x, -50);
+            car.setVelocityY(this.enemySpeed);
         });
     }
-    
-    spawnNitroPickup() {
-        const nitroPickup = this.getFromPool(this.nitroPickupPool, (obj) => {
-            const x = Phaser.Math.Between(140, 660);
-            obj.setPosition(x, -50);
-            obj.setTexture('nitro_pickup');
-            obj.setScale(1.5);
-            obj.setVelocityY(80);
+
+    spawnPoliceCar() {
+        const policeCar = this.getFromPool(this.policeCarPool, (car) => {
+            const side = Phaser.Math.RND.pick(['left', 'right']);
+            const yPos = Phaser.Math.RND.pick([150, 450]);
+            let startX = side === 'left' ? -50 : 850;
+            
+            car.setPosition(startX, yPos);
+            car.setData('isChasing', false);
+            car.setVelocityX(side === 'left' ? 100 : -100);
+            
+            this.time.delayedCall(800, () => {
+                if (car.active) {
+                    const targetX = side === 'left' ? 160 : 640;
+                    car.setVelocityX(0);
+                    car.setVelocityY(this.enemySpeed * 0.9);
+                    car.setData('isChasing', true);
+                }
+            });
         });
     }
-    
-    collectPowerUp(player, powerUp) {
-        this.returnPowerUpToPool(powerUp);
-        this.safePlaySound('sfx_powerup');
+
+    hitEnemy(player, enemyCar) {
+        if (this.isInvincible) {
+            this.returnToPool(enemyCar);
+            return;
+        }
         
-        if (!this.isInvincible) {
+        if (!this.isMuted) {
+            this.safePlaySound('sfx_crash');
+        }
+        this.createCrashEffect(enemyCar.x, enemyCar.y);
+        this.returnToPool(enemyCar);
+        
+        this.lives--;
+        this.livesText.setText('Lives: ' + this.lives);
+        
+        if (this.lives <= 0) {
+            this.gameOver();
+        } else {
             this.isInvincible = true;
-            this.time.delayedCall(3000, () => {
+            this.time.delayedCall(1500, () => {
                 this.isInvincible = false;
             });
-        }
-    }
-    
-    collectNitro(player, nitroPickup) {
-        this.returnNitroToPool(nitroPickup);
-        this.safePlaySound('sfx_powerup');
-        this.nitroBoost = Math.min(this.nitroBoost + 30, 100);
-        this.updateNitroBar();
-    }
-    
-    updateNitroBar() {
-        const width = 200 * (this.nitroBoost / 100);
-        this.nitroBar.width = width;
-        this.nitroText.setText(`NITRO: ${Math.floor(this.nitroBoost)}%`);
-        this.nitroBar.setFillStyle(this.nitroBoost < 20 ? 0xFF0000 : 0x00AAFF);
-    }
-    
-    activateNitro() {
-        if (this.nitroBoost > 0 && !this.isUsingNitro) {
-            this.isUsingNitro = true;
-            this.safePlaySound('sfx_nitro');
-            this.nitroEmitter.start();
-        }
-    }
-    
-    deactivateNitro() {
-        if (this.isUsingNitro) {
-            this.isUsingNitro = false;
-            this.nitroEmitter.stop();
         }
     }
     
@@ -499,107 +509,150 @@ class GameScene extends Phaser.Scene {
         // Screen shake effect
         this.cameras.main.shake(200, 0.01);
     }
-    
-    safePlaySound(soundKey) {
-        try {
-            if (this.sound && this.sound[soundKey]) {
-                this.sound.play(soundKey, { volume: this.sfxVolume });
-            } else if (this.sound && this.cache.audio.exists(soundKey)) {
-                this.sound.play(soundKey, { volume: this.sfxVolume });
-            }
-        } catch (e) {
-            console.log("Sound playback error:", e);
-        }
-    }
-    
-    hitRoadblock(player, roadblock) {
-        if (this.isInvincible) {
-            this.returnToPool(roadblock);
-            return;
-        }
-        
-        this.safePlaySound('sfx_crash');
-        this.createCrashEffect(roadblock.x, roadblock.y);
-        this.returnToPool(roadblock);
-        this.gameOver();
-    }
 
-    spawnEnemyCar() {
-        const enemyCar = this.getFromPool(this.enemyCarPool, (car) => {
-            const x = Phaser.Math.Between(120, 680);
-            car.setPosition(x, -50);
-            car.setVelocityY(this.enemySpeed);
-        });
-    }
-
-    spawnPoliceCar() {
-        const policeCar = this.getFromPool(this.policeCarPool, (car) => {
-            const side = Phaser.Math.RND.pick(['left', 'right']);
-            const yPos = Phaser.Math.RND.pick([150, 450]);
-            let startX = side === 'left' ? -50 : 850;
-            
-            car.setPosition(startX, yPos);
-            car.setData('isChasing', false);
-            car.setVelocityX(side === 'left' ? 100 : -100);
-            
-            this.time.delayedCall(800, () => {
-                if (car.active) {
-                    const targetX = side === 'left' ? 160 : 640;
-                    car.setVelocityX(0);
-                    car.setVelocityY(this.enemySpeed * 0.9);
-                    car.setData('isChasing', true);
-                }
-            });
-        });
-    }
-
-    hitEnemy(player, enemyCar) {
-        if (this.isInvincible) {
-            this.returnToPool(enemyCar);
-            return;
-        }
+    // PAUSE/RESUME FUNCTIONALITY
+    togglePause() {
+        this.isPaused = !this.isPaused;
         
-        this.safePlaySound('sfx_crash');
-        this.createCrashEffect(enemyCar.x, enemyCar.y);
-        this.returnToPool(enemyCar);
-        
-        this.lives--;
-        this.livesText.setText('Lives: ' + this.lives);
-        
-        if (this.lives <= 0) {
-            this.gameOver();
+        if (this.isPaused) {
+            this.pauseGame();
         } else {
-            this.isInvincible = true;
-            this.time.delayedCall(1500, () => {
-                this.isInvincible = false;
-            });
+            this.resumeGame();
         }
     }
-
-    gameOver() {
-        const highScore = localStorage.getItem('nitroLaneRushHighScore') || 0;
-        if (this.score > highScore) {
-            localStorage.setItem('nitroLaneRushHighScore', this.score);
+    
+    pauseGame() {
+        // Pause physics
+        this.physics.pause();
+        
+        // Pause timers
+        if (this.spawnTimer) this.spawnTimer.paused = true;
+        if (this.policeSpawnTimer) this.policeSpawnTimer.paused = true;
+        this.roadblockSpawnTimer.paused = true;
+        if (this.scoreTimer) this.scoreTimer.paused = true;
+        
+        // Pause music
+        if (this.currentMusic) {
+            this.currentMusic.pause();
         }
         
-        // Stop all sounds safely
+        // Stop particle emitters
+        if (this.exhaustEmitter) this.exhaustEmitter.stop();
+        
+        // Show pause menu
+        this.createPauseMenu();
+    }
+    
+    resumeGame() {
+        // Resume physics
+        this.physics.resume();
+        
+        // Resume timers
+        if (this.spawnTimer) this.spawnTimer.paused = false;
+        if (this.policeSpawnTimer) this.policeSpawnTimer.paused = false;
+        if (this.roadblockSpawnTimer) this.roadblockSpawnTimer.paused = false;
+        if (this.scoreTimer) this.scoreTimer.paused = false;
+        
+        // Resume music
+        if (this.currentMusic) {
+            this.currentMusic.resume();
+        }
+        
+        // Resume particle emitters
+        if (this.exhaustEmitter) this.exhaustEmitter.start();
+        
+        // Hide pause menu
+        if (this.pauseMenu) {
+            this.pauseMenu.destroy();
+            this.pauseMenu = null;
+        }
+    }
+    
+    // MUTE TOGGLE FUNCTIONALITY
+    toggleMute() {
+        this.isMuted = !this.isMuted;
+        
+        // Update button text
+        this.muteButton.setText(this.isMuted ? '🔈' : '🔇');
+        
+        // Update music volume
+        if (this.currentMusic) {
+            this.currentMusic.setVolume(this.isMuted ? 0 : this.musicVolume);
+        }
+        
+        // Update sound effects (they will be skipped when muted)
+    }
+    
+    createPauseMenu() {
+        // Create semi-transparent overlay
+        const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.7);
+        
+        // Create pause menu container
+        this.pauseMenu = this.add.container(400, 300);
+        
+        // Menu background
+        const menuBg = this.add.rectangle(0, 0, 400, 300, 0x333333);
+        menuBg.setStrokeStyle(2, 0xFFFFFF);
+        
+        // Title
+        const title = this.add.text(0, -100, 'PAUSED', {
+            fontSize: '36px',
+            fill: '#FFFFFF',
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
+        
+        // Resume button
+        const resumeBtn = this.add.text(0, -30, 'Resume Game', {
+            fontSize: '24px',
+            fill: '#00FF88',
+            backgroundColor: '#444',
+            padding: { x: 20, y: 10 }
+        }).setOrigin(0.5);
+        resumeBtn.setInteractive();
+        resumeBtn.on('pointerdown', () => this.togglePause());
+        
+        // Quit button
+        const quitBtn = this.add.text(0, 30, 'Quit to Menu', {
+            fontSize: '24px',
+            fill: '#FF6600',
+            backgroundColor: '#444',
+            padding: { x: 20, y: 10 }
+        }).setOrigin(0.5);
+        quitBtn.setInteractive();
+        quitBtn.on('pointerdown', () => {
+            this.cleanupBeforeQuit();
+            this.scene.start('StartScene');
+        });
+        
+        // Add all elements to container
+        this.pauseMenu.add([overlay, menuBg, title, resumeBtn, quitBtn]);
+    }
+    
+    cleanupBeforeQuit() {
+        // Stop all sounds
         try {
             if (this.currentMusic) this.currentMusic.stop();
         } catch (e) { /* silent fail */ }
         
         // Stop particle effects
         try {
-            this.nitroEmitter.stop();
-            this.exhaustEmitter.stop();
+            if (this.exhaustEmitter) this.exhaustEmitter.stop();
         } catch (e) { /* silent fail */ }
-        
-        this.deactivateNitro();
         
         // Cleanup active effects
         this.cleanupEffects();
         
-        // Force cleanup of game objects
+        // Cleanup all objects
         this.cleanupAllObjects();
+    }
+    
+    gameOver() {
+        const highScore = localStorage.getItem('nitroLaneRushHighScore') || 0;
+        if (this.score > highScore) {
+            localStorage.setItem('nitroLaneRushHighScore', this.score);
+        }
+        
+        this.cleanupBeforeQuit();
         
         this.time.delayedCall(1000, () => {
             this.scene.start('GameOverScene', { score: this.score });
@@ -636,25 +689,10 @@ class GameScene extends Phaser.Scene {
             }
         });
         
-        [...this.powerUps.children.entries].forEach(obj => {
-            if (obj.active) {
-                try { obj.destroy(); } catch (e) { /* silent fail */ }
-            }
-        });
-        
-        [...this.nitroPickups.children.entries].forEach(obj => {
-            if (obj.active) {
-                try { obj.destroy(); } catch (e) { /* silent fail */ }
-            }
-        });
-        
-        // Stop all timers
         try {
             if (this.spawnTimer) this.spawnTimer.remove(false);
             if (this.policeSpawnTimer) this.policeSpawnTimer.remove(false);
             if (this.roadblockSpawnTimer) this.roadblockSpawnTimer.remove(false);
-            if (this.powerUpSpawnTimer) this.powerUpSpawnTimer.remove(false);
-            if (this.nitroPickupSpawnTimer) this.nitroPickupSpawnTimer.remove(false);
             if (this.scoreTimer) this.scoreTimer.remove(false);
         } catch (e) { /* silent fail */ }
     }
@@ -681,27 +719,9 @@ class GameScene extends Phaser.Scene {
         if (object.setData) object.setData('isChasing', false);
     }
     
-    returnNitroToPool(object) {
-        if (!object) return;
-        object.setActive(false).setVisible(false);
-        object.body.setVelocity(0, 0);
-        object.setPosition(-100, -100);
-        object.setScale(1.5);
-        object.setAlpha(1);
-        object.setTexture('nitro_pickup');
-    }
-    
-    returnPowerUpToPool(object) {
-        if (!object) return;
-        object.setActive(false).setVisible(false);
-        object.body.setVelocity(0, 0);
-        object.setPosition(-100, -100);
-        object.setScale(1.5);
-        object.setAlpha(1);
-        object.setTexture('powerup_shield');
-    }
-
     update() {
+        if (this.isPaused) return;
+        
         if (!this.car || !this.car.body) return;
         
         this.road.tilePositionY -= this.roadSpeed;
@@ -710,37 +730,26 @@ class GameScene extends Phaser.Scene {
             this.car.body.setVelocity(0);
             
             let currentSpeed = this.playerSpeed;
-            
-            if (this.isUsingNitro && this.nitroBoost > 0) {
-                currentSpeed *= 2;
-                this.nitroBoost -= 0.5;
-                this.updateNitroBar();
-            } else if (this.isUsingNitro && this.nitroBoost <= 0) {
-                this.deactivateNitro();
-            }
-            
             const acceleration = currentSpeed * 1.2;
+            
+            // Car tilt effect when turning
             if (this.cursors.left.isDown && this.car.x > 120) { 
                 this.car.body.setVelocityX(-acceleration);
+                // Tilt car to the left when turning left
+                this.car.setRotation(-0.1);
             } else if (this.cursors.right.isDown && this.car.x < 680) { 
                 this.car.body.setVelocityX(acceleration);
+                // Tilt car to the right when turning right
+                this.car.setRotation(0.1);
+            } else {
+                // Return to center rotation when not turning
+                this.car.setRotation(0);
             }
             
             if (this.cursors.up.isDown && this.car.y > 50) { 
                 this.car.body.setVelocityY(-acceleration);
             } else if (this.cursors.down.isDown && this.car.y < 550) { 
                 this.car.body.setVelocityY(acceleration);
-            }
-            
-            // Safe nitro activation
-            try {
-                if (this.cursors.shift && this.cursors.shift.isDown && this.nitroBoost > 0) {
-                    this.activateNitro();
-                } else if (this.cursors.shift && this.cursors.shift.isUp && this.isUsingNitro) {
-                    this.deactivateNitro();
-                }
-            } catch (e) {
-                // Silent fail for shift key issues
             }
         }
 
@@ -758,20 +767,8 @@ class GameScene extends Phaser.Scene {
         });
         
         this.roadblocks.children.entries.forEach(roadblock => {
-            if (roadblock.active && roadblock.y > 650) this.returnToPool(roadblock);
-        });
-        
-        this.nitroPickups.children.entries.forEach(nitroPickup => {
-            if (nitroPickup.active) {
-                nitroPickup.y += this.roadSpeed;
-                if (nitroPickup.y > 650) this.returnNitroToPool(nitroPickup);
-            }
-        });
-        
-        this.powerUps.children.entries.forEach(powerUp => {
-            if (powerUp.active) {
-                powerUp.y += this.roadSpeed;
-                if (powerUp.y > 650) this.returnPowerUpToPool(powerUp);
+            if (roadblock.active && roadblock.y > 650) {
+                this.returnToPool(roadblock);
             }
         });
     }
