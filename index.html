@@ -34,10 +34,10 @@
     <div class="loading">Loading Nitro Lane Rush...</div>
 </div>
 <script>
-// Ultra-lightweight asset manager
+// Asset manager with safe texture creation
 class AssetManager {
     static createTextures(scene) {
-        // Only create if not already exists
+        // Create particle texture safely
         if (!scene.textures.exists('particle')) {
             const g = scene.add.graphics();
             g.fillStyle(0xFFFFFF);
@@ -46,6 +46,7 @@ class AssetManager {
             g.destroy();
         }
         
+        // Create power-up texture safely
         if (!scene.textures.exists('powerup_shield')) {
             const g = scene.add.graphics();
             g.fillStyle(0x0066FF);
@@ -58,6 +59,7 @@ class AssetManager {
             g.destroy();
         }
         
+        // Create nitro pickup texture safely
         if (!scene.textures.exists('nitro_pickup')) {
             const g = scene.add.graphics();
             g.fillStyle(0x00AAFF);
@@ -72,7 +74,7 @@ class AssetManager {
     }
 }
 
-// SCENE 1: ULTRA-LIGHT START SCREEN
+// START SCENE
 class StartScene extends Phaser.Scene {
     constructor() {
         super('StartScene');
@@ -119,7 +121,6 @@ class StartScene extends Phaser.Scene {
     }
 
     createSimpleBackground() {
-        // Minimal background elements
         for (let i = 0; i < 2; i++) {
             const line = this.add.rectangle(200 + i * 300, -50, 4, 100, 0x444444);
             this.tweens.add({ targets: line, y: 700, duration: 2500, 
@@ -132,7 +133,7 @@ class StartScene extends Phaser.Scene {
     }
 }
 
-// SCENE 2: ULTRA-PERFORMANCE GAME SCENE
+// GAME SCENE WITH SAFE CRASH EFFECTS
 class GameScene extends Phaser.Scene {
     constructor() {
         super('GameScene');
@@ -158,15 +159,17 @@ class GameScene extends Phaser.Scene {
         this.isPaused = false;
         this.musicVolume = 0.5;
         this.sfxVolume = 0.7;
-        this.frameSkip = 0;
         
-        // Minimal pools
+        // Minimal pools for performance
         this.enemyCarPool = [];
         this.policeCarPool = [];
         this.roadblockPool = [];
         this.nitroPickupPool = [];
         this.powerUpPool = [];
         this.maxPoolSize = 10;
+        
+        // Effect management
+        this.activeEffects = [];
     }
 
     preload() {
@@ -270,38 +273,39 @@ class GameScene extends Phaser.Scene {
             fontSize: '16px', fill: '#fff', stroke: '#000', strokeThickness: 1
         }).setOrigin(0, 0);
 
-        // Particle systems (minimal)
-        this.createMinimalParticles();
+        // Particle systems (safe versions)
+        this.createSafeParticles();
         
         this.scoreTimer = this.time.addEvent({ delay: 100, 
             callback: this.updateScore, callbackScope: this, loop: true });
     }
 
-    createMinimalParticles() {
-        // Simple exhaust (no follow)
+    createSafeParticles() {
+        // Exhaust particles (limited)
         this.exhaustEmitter = this.add.particles(0, 0, 'particle', {
             speed: { min: 20, max: 40 },
             scale: { start: 0.3, end: 0 },
             alpha: { start: 0.6, end: 0 },
             lifespan: 300,
-            frequency: 300,
+            frequency: 200,
             tint: 0x666666,
-            maxParticles: 30
+            maxParticles: 20
         });
-        this.exhaustEmitter.stop();
+        this.exhaustEmitter.startFollow(this.car, 0, 30);
         
-        // Simple nitro (no follow)
+        // Nitro particles (limited)
         this.nitroEmitter = this.add.particles(0, 0, 'particle', {
             speed: { min: 100, max: 200 },
             scale: { start: 0.5, end: 0 },
             alpha: { start: 1, end: 0 },
             lifespan: 200,
-            frequency: 150,
+            frequency: 100,
             tint: 0x00AAFF,
             blendMode: 'ADD',
-            maxParticles: 20
+            maxParticles: 15
         });
         this.nitroEmitter.stop();
+        this.nitroEmitter.startFollow(this.car, 0, 30);
     }
 
     initializeMinimalPools() {
@@ -419,9 +423,7 @@ class GameScene extends Phaser.Scene {
     
     collectPowerUp(player, powerUp) {
         this.returnPowerUpToPool(powerUp);
-        if (this.sound && this.sfx_powerup) {
-            this.sound.play('sfx_powerup', { volume: this.sfxVolume });
-        }
+        this.safePlaySound('sfx_powerup');
         
         if (!this.isInvincible) {
             this.isInvincible = true;
@@ -433,9 +435,7 @@ class GameScene extends Phaser.Scene {
     
     collectNitro(player, nitroPickup) {
         this.returnNitroToPool(nitroPickup);
-        if (this.sound && this.sfx_powerup) {
-            this.sound.play('sfx_powerup', { volume: this.sfxVolume });
-        }
+        this.safePlaySound('sfx_powerup');
         this.nitroBoost = Math.min(this.nitroBoost + 30, 100);
         this.updateNitroBar();
     }
@@ -450,9 +450,7 @@ class GameScene extends Phaser.Scene {
     activateNitro() {
         if (this.nitroBoost > 0 && !this.isUsingNitro) {
             this.isUsingNitro = true;
-            if (this.sound && this.sfx_nitro) {
-                this.sound.play('sfx_nitro', { volume: this.sfxVolume });
-            }
+            this.safePlaySound('sfx_nitro');
             this.nitroEmitter.start();
         }
     }
@@ -464,15 +462,64 @@ class GameScene extends Phaser.Scene {
         }
     }
     
+    // SAFE CRASH EFFECTS WITH PROPER CLEANUP
+    createCrashEffect(x, y) {
+        // Limit number of active effects
+        if (this.activeEffects.length > 5) {
+            // Remove oldest effect
+            const oldEffect = this.activeEffects.shift();
+            if (oldEffect && oldEffect.active) {
+                oldEffect.destroy();
+            }
+        }
+        
+        // Create explosion particles
+        const explosion = this.add.particles(x, y, 'particle', {
+            speed: { min: 100, max: 300 },
+            scale: { start: 1, end: 0 },
+            alpha: { start: 1, end: 0 },
+            lifespan: 500,
+            quantity: 10,
+            tint: [0xFF6600, 0xFF0000, 0xFFFF00],
+            maxParticles: 15
+        });
+        
+        // Store reference and auto-cleanup
+        this.activeEffects.push(explosion);
+        this.time.delayedCall(500, () => {
+            const index = this.activeEffects.indexOf(explosion);
+            if (index > -1) {
+                this.activeEffects.splice(index, 1);
+            }
+            if (explosion.active) {
+                explosion.destroy();
+            }
+        });
+        
+        // Screen shake effect
+        this.cameras.main.shake(200, 0.01);
+    }
+    
+    safePlaySound(soundKey) {
+        try {
+            if (this.sound && this.sound[soundKey]) {
+                this.sound.play(soundKey, { volume: this.sfxVolume });
+            } else if (this.sound && this.cache.audio.exists(soundKey)) {
+                this.sound.play(soundKey, { volume: this.sfxVolume });
+            }
+        } catch (e) {
+            console.log("Sound playback error:", e);
+        }
+    }
+    
     hitRoadblock(player, roadblock) {
         if (this.isInvincible) {
             this.returnToPool(roadblock);
             return;
         }
         
-        if (this.sound && this.sfx_crash) {
-            this.sound.play('sfx_crash', { volume: this.sfxVolume });
-        }
+        this.safePlaySound('sfx_crash');
+        this.createCrashEffect(roadblock.x, roadblock.y);
         this.returnToPool(roadblock);
         this.gameOver();
     }
@@ -512,9 +559,8 @@ class GameScene extends Phaser.Scene {
             return;
         }
         
-        if (this.sound && this.sfx_crash) {
-            this.sound.play('sfx_crash', { volume: this.sfxVolume });
-        }
+        this.safePlaySound('sfx_crash');
+        this.createCrashEffect(enemyCar.x, enemyCar.y);
         this.returnToPool(enemyCar);
         
         this.lives--;
@@ -536,15 +582,23 @@ class GameScene extends Phaser.Scene {
             localStorage.setItem('nitroLaneRushHighScore', this.score);
         }
         
-        if (this.currentMusic) { 
-            try { this.currentMusic.stop(); } catch(e) {} 
-        }
+        // Stop all sounds safely
+        try {
+            if (this.currentMusic) this.currentMusic.stop();
+        } catch (e) { /* silent fail */ }
         
-        this.nitroEmitter.stop();
-        this.exhaustEmitter.stop();
+        // Stop particle effects
+        try {
+            this.nitroEmitter.stop();
+            this.exhaustEmitter.stop();
+        } catch (e) { /* silent fail */ }
+        
         this.deactivateNitro();
         
-        // Force cleanup
+        // Cleanup active effects
+        this.cleanupEffects();
+        
+        // Force cleanup of game objects
         this.cleanupAllObjects();
         
         this.time.delayedCall(1000, () => {
@@ -552,35 +606,57 @@ class GameScene extends Phaser.Scene {
         });
     }
 
+    cleanupEffects() {
+        // Clean up any remaining effects
+        while (this.activeEffects.length > 0) {
+            const effect = this.activeEffects.pop();
+            if (effect && effect.active) {
+                try { effect.destroy(); } catch (e) { /* silent fail */ }
+            }
+        }
+    }
+
     cleanupAllObjects() {
-        // Force destroy all active objects
+        // Force destroy all active objects to prevent memory leaks
         [...this.enemyCars.children.entries].forEach(obj => {
-            if (obj.active) obj.destroy();
+            if (obj.active) {
+                try { obj.destroy(); } catch (e) { /* silent fail */ }
+            }
         });
         
         [...this.policeCars.children.entries].forEach(obj => {
-            if (obj.active) obj.destroy();
+            if (obj.active) {
+                try { obj.destroy(); } catch (e) { /* silent fail */ }
+            }
         });
         
         [...this.roadblocks.children.entries].forEach(obj => {
-            if (obj.active) obj.destroy();
+            if (obj.active) {
+                try { obj.destroy(); } catch (e) { /* silent fail */ }
+            }
         });
         
         [...this.powerUps.children.entries].forEach(obj => {
-            if (obj.active) obj.destroy();
+            if (obj.active) {
+                try { obj.destroy(); } catch (e) { /* silent fail */ }
+            }
         });
         
         [...this.nitroPickups.children.entries].forEach(obj => {
-            if (obj.active) obj.destroy();
+            if (obj.active) {
+                try { obj.destroy(); } catch (e) { /* silent fail */ }
+            }
         });
         
         // Stop all timers
-        if (this.spawnTimer) this.spawnTimer.remove();
-        if (this.policeSpawnTimer) this.policeSpawnTimer.remove();
-        if (this.roadblockSpawnTimer) this.roadblockSpawnTimer.remove();
-        if (this.powerUpSpawnTimer) this.powerUpSpawnTimer.remove();
-        if (this.nitroPickupSpawnTimer) this.nitroPickupSpawnTimer.remove();
-        if (this.scoreTimer) this.scoreTimer.remove();
+        try {
+            if (this.spawnTimer) this.spawnTimer.remove(false);
+            if (this.policeSpawnTimer) this.policeSpawnTimer.remove(false);
+            if (this.roadblockSpawnTimer) this.roadblockSpawnTimer.remove(false);
+            if (this.powerUpSpawnTimer) this.powerUpSpawnTimer.remove(false);
+            if (this.nitroPickupSpawnTimer) this.nitroPickupSpawnTimer.remove(false);
+            if (this.scoreTimer) this.scoreTimer.remove(false);
+        } catch (e) { /* silent fail */ }
     }
 
     getFromPool(pool, resetCallback) {
@@ -656,6 +732,7 @@ class GameScene extends Phaser.Scene {
                 this.car.body.setVelocityY(acceleration);
             }
             
+            // Safe nitro activation
             try {
                 if (this.cursors.shift && this.cursors.shift.isDown && this.nitroBoost > 0) {
                     this.activateNitro();
@@ -663,7 +740,7 @@ class GameScene extends Phaser.Scene {
                     this.deactivateNitro();
                 }
             } catch (e) {
-                // Silent fail
+                // Silent fail for shift key issues
             }
         }
 
@@ -716,7 +793,7 @@ class GameScene extends Phaser.Scene {
     }
 }
 
-// SCENE 3: ULTRA-LIGHT GAME OVER
+// GAME OVER SCENE
 class GameOverScene extends Phaser.Scene {
     constructor() {
         super('GameOverScene');
@@ -758,7 +835,7 @@ class GameOverScene extends Phaser.Scene {
     }
 }
 
-// ULTRA-PERFORMANCE CONFIG
+// PERFORMANCE OPTIMIZED CONFIG
 const config = {
     type: Phaser.AUTO,
     width: 800,
@@ -784,7 +861,7 @@ const config = {
     scene: [StartScene, GameScene, GameOverScene]
 };
 
-// SAFER GAME INITIALIZATION
+// SAFE GAME INITIALIZATION
 window.addEventListener('load', () => {
     try {
         window.game = new Phaser.Game(config);
@@ -794,7 +871,7 @@ window.addEventListener('load', () => {
     }
 });
 
-// FORCE CLEANUP ON UNLOAD
+// CLEANUP ON UNLOAD
 window.addEventListener('beforeunload', () => {
     if (window.game) {
         try {
