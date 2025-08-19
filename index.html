@@ -568,20 +568,7 @@ class GameScene extends Phaser.Scene {
         
         // Pre-create nitro pickups with proper initialization
         for (let i = 0; i < 5; i++) {
-            // Create nitro pickup graphic if not exists
-            if (!this.textures.exists('nitro_pickup')) {
-                const nitroGraphics = this.add.graphics();
-                nitroGraphics.fillStyle(0x00AAFF);
-                nitroGraphics.fillCircle(0, 0, 12);
-                nitroGraphics.fillStyle(0xFFFFFF);
-                nitroGraphics.fillCircle(0, 0, 8);
-                nitroGraphics.fillStyle(0x00AAFF);
-                nitroGraphics.fillCircle(0, 0, 4);
-                nitroGraphics.generateTexture('nitro_pickup', 24, 24);
-                nitroGraphics.destroy();
-            }
-            
-            const nitroPickup = this.physics.add.sprite(-100, -100, 'nitro_pickup');
+            const nitroPickup = this.physics.add.sprite(-100, -100, 'nitro_pickup_placeholder');
             nitroPickup.setActive(false).setVisible(false);
             nitroPickup.setScale(1.5);
             this.nitroPickupPool.push(nitroPickup);
@@ -827,6 +814,7 @@ class GameScene extends Phaser.Scene {
             obj.setPosition(x, -50);
             obj.setScale(1.5);
             obj.setVelocityY(80);
+            obj.setTexture('nitro_pickup');
             
             // Add pulsing effect
             this.tweens.add({
@@ -1526,6 +1514,7 @@ class GameScene extends Phaser.Scene {
         object.setPosition(-100, -100);
         object.setScale(1.5); // Reset to default scale
         object.setAlpha(1); // Reset alpha
+        object.setTexture('nitro_pickup_placeholder'); // Reset texture
     }
 
     update() {
@@ -1584,11 +1573,16 @@ class GameScene extends Phaser.Scene {
                 this.exhaustEmitter.setFrequency(this.isUsingNitro ? 100 : 100);
             }
             
-            // Nitro activation (Shift key)
-            if (this.cursors.shift.isDown && this.nitroBoost > 0) {
-                this.activateNitro();
-            } else if (this.cursors.shift.isUp && this.isUsingNitro) {
-                this.deactivateNitro();
+            // Nitro activation (Shift key) - safer implementation
+            try {
+                if (this.cursors.shift && this.cursors.shift.isDown && this.nitroBoost > 0) {
+                    this.activateNitro();
+                } else if (this.cursors.shift && this.cursors.shift.isUp && this.isUsingNitro) {
+                    this.deactivateNitro();
+                }
+            } catch (e) {
+                // Safe fallback - ignore shift key errors
+                console.log("Shift key error handled");
             }
         }
 
