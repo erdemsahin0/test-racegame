@@ -1,17 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Nitro Lane Rush - Animated</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.70.0/phaser.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        #game-container {
+            position: relative;
+        }
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+<div id="game-container">
+    <div class="loading">Loading Nitro Lane Rush...</div>
+</div>
+<script>
+// Improved asset creation with better visuals
+class AssetManager {
+    static createRoad(scene) {
+        const roadGraphics = scene.add.graphics();
+        roadGraphics.fillStyle(0x333333);
+        roadGraphics.fillRect(0, 0, 800, 600);
+        
+        // Road shoulders
+        roadGraphics.fillStyle(0x226622);
+        roadGraphics.fillRect(0, 0, 120, 600);
+        roadGraphics.fillRect(680, 0, 120, 600);
+        
+        // Road markings
+        roadGraphics.lineStyle(4, 0xFFFFFF);
+        for (let i = 0; i < 4; i++) {
+            const x = 200 + (i * 150);
+            roadGraphics.lineBetween(x, 0, x, 600);
+        }
+        
+        // Dashed center lines
+        roadGraphics.lineStyle(3, 0xFFFF00);
+        for (let lane = 0; lane < 3; lane++) {
+            const x = 275 + (lane * 150);
+            for (let dash = 0; dash < 20; dash++) {
+                const y = dash * 40;
+                roadGraphics.lineBetween(x, y, x, y + 20);
+            }
+        }
+        
+        roadGraphics.generateTexture('road', 800, 600);
+        roadGraphics.destroy();
+    }
+    
+    static createPlayerCar(scene) {
+        const playerGraphics = scene.add.graphics();
+        playerGraphics.fillStyle(0x0066CC);
+        playerGraphics.fillRoundedRect(0, 0, 40, 80, 8);
+        playerGraphics.fillStyle(0x87CEEB);
+        playerGraphics.fillRect(8, 15, 24, 35);
+        playerGraphics.fillStyle(0x333333);
+        playerGraphics.fillCircle(10, 10, 4);
+        playerGraphics.fillCircle(30, 10, 4);
+        playerGraphics.fillCircle(10, 70, 4);
+        playerGraphics.fillCircle(30, 70, 4);
+        playerGraphics.fillStyle(0xFF0000);
+        playerGraphics.fillCircle(20, 15, 3);
+        playerGraphics.generateTexture('player_car_hero', 40, 80);
+        playerGraphics.destroy();
+    }
+    
+    static createEnemyCar(scene, key, primaryColor, secondaryColor) {
+        const carGraphics = scene.add.graphics();
+        carGraphics.fillStyle(primaryColor);
+        carGraphics.fillRoundedRect(0, 0, 40, 80, 8);
+        carGraphics.fillStyle(secondaryColor);
+        carGraphics.fillRect(8, 15, 24, 35);
+        carGraphics.fillStyle(0x333333);
+        carGraphics.fillCircle(10, 10, 4);
+        carGraphics.fillCircle(30, 10, 4);
+        carGraphics.fillCircle(10, 70, 4);
+        carGraphics.fillCircle(30, 70, 4);
+        carGraphics.generateTexture(key, 40, 80);
+        carGraphics.destroy();
+    }
+    
+    static createPoliceCar(scene) {
+        const policeGraphics = scene.add.graphics();
+        policeGraphics.fillStyle(0x000000);
+        policeGraphics.fillRoundedRect(0, 0, 40, 80, 8);
+        policeGraphics.fillStyle(0xFFFFFF);
+        policeGraphics.fillRect(0, 25, 40, 30);
+        policeGraphics.fillStyle(0x87CEEB);
+        policeGraphics.fillRect(8, 15, 24, 35);
+        policeGraphics.fillStyle(0x333333);
+        policeGraphics.fillCircle(10, 10, 4);
+        policeGraphics.fillCircle(30, 10, 4);
+        policeGraphics.fillCircle(10, 70, 4);
+        policeGraphics.fillCircle(30, 70, 4);
+        policeGraphics.fillStyle(0xFF0000);
+        policeGraphics.fillCircle(12, 8, 3);
+        policeGraphics.fillStyle(0x0000FF);
+        policeGraphics.fillCircle(28, 8, 3);
+        policeGraphics.generateTexture('enemy_car_police', 40, 80);
+        policeGraphics.destroy();
+    }
+    
+    static createRoadblock(scene) {
+        const roadblockGraphics = scene.add.graphics();
+        roadblockGraphics.fillStyle(0xFF0000);
+        roadblockGraphics.fillRect(0, 0, 60, 20);
+        roadblockGraphics.fillStyle(0xFFFFFF);
+        for (let i = 0; i < 6; i++) {
+            roadblockGraphics.fillRect(i * 20, (i % 2) * 10, 10, 10);
+        }
+        roadblockGraphics.generateTexture('obstacle_roadblock_a', 60, 20);
+        roadblockGraphics.destroy();
+    }
+    
+    static createParticle(scene) {
+        const particleGraphics = scene.add.graphics();
+        particleGraphics.fillStyle(0xFFFFFF);
+        particleGraphics.fillCircle(2, 2, 2);
+        particleGraphics.generateTexture('particle', 4, 4);
+        particleGraphics.destroy();
+    }
+}
+
 // SCENE 1: THE START SCREEN WITH ANIMATIONS
 class StartScene extends Phaser.Scene {
     constructor() {
         super('StartScene');
     }
     
+    preload() {
+        // Create all game assets programmatically
+        AssetManager.createRoad(this);
+        AssetManager.createPlayerCar(this);
+        AssetManager.createEnemyCar(this, 'enemy_car_green', 0x00AA00, 0x90EE90);
+        AssetManager.createEnemyCar(this, 'enemy_car_blue_sky', 0x0066CC, 0x87CEEB);
+        AssetManager.createEnemyCar(this, 'enemy_car_yellow', 0xFFDD00, 0xFFFF99);
+        AssetManager.createPoliceCar(this);
+        AssetManager.createRoadblock(this);
+        AssetManager.createParticle(this);
+    }
+    
     create() {
+        // Remove loading text
+        document.querySelector('.loading').style.display = 'none';
+        
         // Animated title with bounce effect
-        const title = this.add.text(400, 150, 'Nitro Lane Rush', { 
+        const title = this.add.text(400, 150, 'NITRO LANE RUSH', { 
             fontSize: '48px', 
-            fill: '#fff',
+            fill: '#FFD700',
             fontStyle: 'bold',
-            stroke: '#FF6B00',
-            strokeThickness: 3
+            stroke: '#000',
+            strokeThickness: 4
         }).setOrigin(0.5);
         
         // Title animation - bounce in
@@ -28,7 +186,9 @@ class StartScene extends Phaser.Scene {
         const startText = this.add.text(400, 300, 'Press SPACE or Tap to Start', { 
             fontSize: '24px', 
             fill: '#00FF88',
-            fontStyle: 'bold'
+            fontStyle: 'bold',
+            stroke: '#000',
+            strokeThickness: 2
         }).setOrigin(0.5);
         
         this.tweens.add({
@@ -43,7 +203,9 @@ class StartScene extends Phaser.Scene {
         // Instructions with slide-in effect
         const instructions = this.add.text(400, 350, 'Use Arrow Keys or Drag to Move', { 
             fontSize: '18px', 
-            fill: '#ccc' 
+            fill: '#ccc',
+            stroke: '#000',
+            strokeThickness: 1
         }).setOrigin(0.5);
         
         instructions.setX(-200);
@@ -139,119 +301,6 @@ class GameScene extends Phaser.Scene {
         // Animation and effects
         this.particleEmitters = [];
         this.screenShakeIntensity = 0;
-    }
-
-    preload() {
-        // Create graphics programmatically
-        this.createGameGraphics();
-    }
-
-    createGameGraphics() {
-        // Create road background with more detail
-        const roadGraphics = this.add.graphics();
-        roadGraphics.fillStyle(0x2a2a2a);
-        roadGraphics.fillRect(0, 0, 800, 600);
-        
-        // Add road shoulders
-        roadGraphics.fillStyle(0x1a1a1a);
-        roadGraphics.fillRect(0, 0, 120, 600);
-        roadGraphics.fillRect(680, 0, 120, 600);
-        
-        // Add road lines
-        roadGraphics.lineStyle(4, 0xFFFFFF);
-        for (let i = 0; i < 4; i++) {
-            const x = 200 + (i * 150);
-            roadGraphics.lineBetween(x, 0, x, 600);
-        }
-        
-        // Add dashed center lines
-        roadGraphics.lineStyle(3, 0xFFFF00);
-        for (let lane = 0; lane < 3; lane++) {
-            const x = 275 + (lane * 150);
-            for (let dash = 0; dash < 20; dash++) {
-                const y = dash * 40;
-                roadGraphics.lineBetween(x, y, x, y + 20);
-            }
-        }
-        
-        roadGraphics.generateTexture('road', 800, 600);
-        roadGraphics.destroy();
-
-        // Create player car with more detail
-        const playerGraphics = this.add.graphics();
-        playerGraphics.fillStyle(0x00CCFF);
-        playerGraphics.fillRoundedRect(0, 0, 40, 80, 8);
-        playerGraphics.fillStyle(0x87CEEB);
-        playerGraphics.fillRect(8, 15, 24, 35);
-        playerGraphics.fillStyle(0x333333);
-        playerGraphics.fillCircle(10, 10, 4);
-        playerGraphics.fillCircle(30, 10, 4);
-        playerGraphics.fillCircle(10, 70, 4);
-        playerGraphics.fillCircle(30, 70, 4);
-        // Add racing stripe
-        playerGraphics.fillStyle(0xFFFFFF);
-        playerGraphics.fillRect(18, 5, 4, 70);
-        playerGraphics.generateTexture('player_car_hero', 40, 80);
-        playerGraphics.destroy();
-
-        // Create enemy cars with more variety
-        this.createEnemyCarGraphics('enemy_car_green', 0x00AA00, 0x90EE90);
-        this.createEnemyCarGraphics('enemy_car_blue_sky', 0x0066CC, 0x87CEEB);
-        this.createEnemyCarGraphics('enemy_car_yellow', 0xFFDD00, 0xFFFF99);
-
-        // Create police car with emergency lights
-        const policeGraphics = this.add.graphics();
-        policeGraphics.fillStyle(0x000000);
-        policeGraphics.fillRoundedRect(0, 0, 40, 80, 8);
-        policeGraphics.fillStyle(0xFFFFFF);
-        policeGraphics.fillRect(0, 25, 40, 30);
-        policeGraphics.fillStyle(0x87CEEB);
-        policeGraphics.fillRect(8, 15, 24, 35);
-        policeGraphics.fillStyle(0x333333);
-        policeGraphics.fillCircle(10, 10, 4);
-        policeGraphics.fillCircle(30, 10, 4);
-        policeGraphics.fillCircle(10, 70, 4);
-        policeGraphics.fillCircle(30, 70, 4);
-        // Emergency lights
-        policeGraphics.fillStyle(0xFF0000);
-        policeGraphics.fillCircle(12, 8, 3);
-        policeGraphics.fillStyle(0x0000FF);
-        policeGraphics.fillCircle(28, 8, 3);
-        policeGraphics.generateTexture('enemy_car_police', 40, 80);
-        policeGraphics.destroy();
-
-        // Create roadblock
-        const roadblockGraphics = this.add.graphics();
-        roadblockGraphics.fillStyle(0xFF0000);
-        roadblockGraphics.fillRect(0, 0, 60, 20);
-        roadblockGraphics.fillStyle(0xFFFFFF);
-        for (let i = 0; i < 6; i++) {
-            roadblockGraphics.fillRect(i * 20, (i % 2) * 10, 10, 10);
-        }
-        roadblockGraphics.generateTexture('obstacle_roadblock_a', 60, 20);
-        roadblockGraphics.destroy();
-
-        // Create particle texture for effects
-        const particleGraphics = this.add.graphics();
-        particleGraphics.fillStyle(0xFFFFFF);
-        particleGraphics.fillCircle(2, 2, 2);
-        particleGraphics.generateTexture('particle', 4, 4);
-        particleGraphics.destroy();
-    }
-
-    createEnemyCarGraphics(key, primaryColor, secondaryColor) {
-        const carGraphics = this.add.graphics();
-        carGraphics.fillStyle(primaryColor);
-        carGraphics.fillRoundedRect(0, 0, 40, 80, 8);
-        carGraphics.fillStyle(secondaryColor);
-        carGraphics.fillRect(8, 15, 24, 35);
-        carGraphics.fillStyle(0x333333);
-        carGraphics.fillCircle(10, 10, 4);
-        carGraphics.fillCircle(30, 10, 4);
-        carGraphics.fillCircle(10, 70, 4);
-        carGraphics.fillCircle(30, 70, 4);
-        carGraphics.generateTexture(key, 40, 80);
-        carGraphics.destroy();
     }
 
     create() {
@@ -1150,7 +1199,9 @@ const config = {
 };
 
 // Create the game instance
-new Phaser.Game(config);
+window.addEventListener('load', () => {
+    new Phaser.Game(config);
+});
 </script>
 </body>
 </html>
