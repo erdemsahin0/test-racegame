@@ -2,31 +2,130 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Nitro Lane Rush</title>
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.js"></script>
+    <title>Nitro Lane Rush - Animated</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.70.0/phaser.min.js"></script>
 </head>
 <body>
 <script>
-// SCENE 1: THE START SCREEN
+// SCENE 1: THE START SCREEN WITH ANIMATIONS
 class StartScene extends Phaser.Scene {
     constructor() {
         super('StartScene');
     }
+    
     create() {
-        this.add.text(400, 200, 'Nitro Lane Rush', { fontSize: '48px', fill: '#fff' }).setOrigin(0.5);
-        this.add.text(400, 300, 'Press SPACE or Tap to Start', { fontSize: '24px', fill: '#fff' }).setOrigin(0.5);
+        // Animated title with bounce effect
+        const title = this.add.text(400, 150, 'Nitro Lane Rush', { 
+            fontSize: '48px', 
+            fill: '#fff',
+            fontStyle: 'bold',
+            stroke: '#FF6B00',
+            strokeThickness: 3
+        }).setOrigin(0.5);
+        
+        // Title animation - bounce in
+        title.setScale(0);
+        this.tweens.add({
+            targets: title,
+            scale: 1,
+            duration: 800,
+            ease: 'Back.easeOut',
+            delay: 200
+        });
+
+        // Pulsing start text
+        const startText = this.add.text(400, 300, 'Press SPACE or Tap to Start', { 
+            fontSize: '24px', 
+            fill: '#00FF88',
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
+        
+        this.tweens.add({
+            targets: startText,
+            alpha: 0.3,
+            duration: 1000,
+            ease: 'Sine.easeInOut',
+            yoyo: true,
+            repeat: -1
+        });
+
+        // Instructions with slide-in effect
+        const instructions = this.add.text(400, 350, 'Use Arrow Keys or Drag to Move', { 
+            fontSize: '18px', 
+            fill: '#ccc' 
+        }).setOrigin(0.5);
+        
+        instructions.setX(-200);
+        this.tweens.add({
+            targets: instructions,
+            x: 400,
+            duration: 1000,
+            ease: 'Power2.easeOut',
+            delay: 500
+        });
+
+        // Animated background elements
+        this.createAnimatedBackground();
+        
         this.game.canvas.setAttribute('tabindex', '0');
         this.game.canvas.focus();
+        
         this.input.keyboard.once('keydown-SPACE', () => {
-            this.scene.start('GameScene');
+            this.startGameWithTransition();
         });
         this.input.on('pointerdown', () => {
-            this.scene.start('GameScene');
+            this.startGameWithTransition();
+        });
+    }
+
+    createAnimatedBackground() {
+        // Create moving road lines
+        for (let i = 0; i < 5; i++) {
+            const line = this.add.rectangle(150 + i * 130, -50, 4, 100, 0x444444);
+            
+            this.tweens.add({
+                targets: line,
+                y: 700,
+                duration: 2000 + (i * 200),
+                ease: 'Linear',
+                repeat: -1,
+                delay: i * 400
+            });
+        }
+
+        // Create floating cars in background
+        for (let i = 0; i < 3; i++) {
+            const car = this.add.rectangle(200 + i * 200, 100 + i * 150, 30, 60, 0x333333, 0.3);
+            
+            this.tweens.add({
+                targets: car,
+                y: car.y + 20,
+                duration: 1500,
+                ease: 'Sine.easeInOut',
+                yoyo: true,
+                repeat: -1,
+                delay: i * 500
+            });
+        }
+    }
+
+    startGameWithTransition() {
+        // Fade out transition
+        const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0);
+        
+        this.tweens.add({
+            targets: overlay,
+            alpha: 1,
+            duration: 500,
+            ease: 'Power2.easeIn',
+            onComplete: () => {
+                this.scene.start('GameScene');
+            }
         });
     }
 }
 
-// SCENE 2: THE MAIN GAME
+// SCENE 2: THE MAIN GAME WITH ENHANCED ANIMATIONS
 class GameScene extends Phaser.Scene {
     constructor() {
         super('GameScene');
@@ -39,28 +138,142 @@ class GameScene extends Phaser.Scene {
         this.lives = 3;
         this.isInvincible = false;
         this.policeSpeed = 100;
-        this.currentTrackIndex = 0;
+        
+        // Performance optimization: Object pools
+        this.enemyCarPool = [];
+        this.policeCarPool = [];
+        this.roadblockPool = [];
+        this.maxPoolSize = 20;
+
+        // Animation and effects
+        this.particleEmitters = [];
+        this.screenShakeIntensity = 0;
     }
 
     preload() {
-        // Load all image assets
-        this.load.image('road', 'assets/road.png');
-        this.load.image('player_car_hero', 'assets/player_car_hero.png');
-        this.load.image('enemy_car_green', 'assets/enemy_car_green.png');
-        this.load.image('enemy_car_yellow', 'assets/enemy_car_yellow.png');
-        this.load.image('enemy_car_blue_sky', 'assets/enemy_car_blue_sky.png');
-        this.load.image('enemy_car_police', 'assets/enemy_car_police.png');
-        this.load.image('obstacle_roadblock_a', 'assets/obstacle_roadblock_a.png');
+        // Create graphics programmatically
+        this.createGameGraphics();
+    }
 
-        // Load all four music tracks and the crash sound
-        this.load.audio('music_1', 'assets/music_1.mp3');
-        this.load.audio('music_2', 'assets/music_2.mp3');
-        this.load.audio('music_3', 'assets/music_3.mp3');
-        this.load.audio('music_4', 'assets/music_4.mp3');
-        this.load.audio('sfx_crash', 'assets/crash.mp3');
+    createGameGraphics() {
+        // Create road background with more detail
+        const roadGraphics = this.add.graphics();
+        roadGraphics.fillStyle(0x2a2a2a);
+        roadGraphics.fillRect(0, 0, 800, 600);
+        
+        // Add road shoulders
+        roadGraphics.fillStyle(0x1a1a1a);
+        roadGraphics.fillRect(0, 0, 120, 600);
+        roadGraphics.fillRect(680, 0, 120, 600);
+        
+        // Add road lines
+        roadGraphics.lineStyle(4, 0xFFFFFF);
+        for (let i = 0; i < 4; i++) {
+            const x = 200 + (i * 150);
+            roadGraphics.lineBetween(x, 0, x, 600);
+        }
+        
+        // Add dashed center lines
+        roadGraphics.lineStyle(3, 0xFFFF00);
+        for (let lane = 0; lane < 3; lane++) {
+            const x = 275 + (lane * 150);
+            for (let dash = 0; dash < 20; dash++) {
+                const y = dash * 40;
+                roadGraphics.lineBetween(x, y, x, y + 20);
+            }
+        }
+        
+        roadGraphics.generateTexture('road', 800, 600);
+        roadGraphics.destroy();
+
+        // Create player car with more detail
+        const playerGraphics = this.add.graphics();
+        playerGraphics.fillStyle(0x00CCFF);
+        playerGraphics.fillRoundedRect(0, 0, 40, 80, 8);
+        playerGraphics.fillStyle(0x87CEEB);
+        playerGraphics.fillRect(8, 15, 24, 35);
+        playerGraphics.fillStyle(0x333333);
+        playerGraphics.fillCircle(10, 10, 4);
+        playerGraphics.fillCircle(30, 10, 4);
+        playerGraphics.fillCircle(10, 70, 4);
+        playerGraphics.fillCircle(30, 70, 4);
+        // Add racing stripe
+        playerGraphics.fillStyle(0xFFFFFF);
+        playerGraphics.fillRect(18, 5, 4, 70);
+        playerGraphics.generateTexture('player_car_hero', 40, 80);
+        playerGraphics.destroy();
+
+        // Create enemy cars with more variety
+        this.createEnemyCarGraphics('enemy_car_green', 0x00AA00, 0x90EE90);
+        this.createEnemyCarGraphics('enemy_car_blue_sky', 0x0066CC, 0x87CEEB);
+        this.createEnemyCarGraphics('enemy_car_yellow', 0xFFDD00, 0xFFFF99);
+
+        // Create police car with emergency lights
+        const policeGraphics = this.add.graphics();
+        policeGraphics.fillStyle(0x000000);
+        policeGraphics.fillRoundedRect(0, 0, 40, 80, 8);
+        policeGraphics.fillStyle(0xFFFFFF);
+        policeGraphics.fillRect(0, 25, 40, 30);
+        policeGraphics.fillStyle(0x87CEEB);
+        policeGraphics.fillRect(8, 15, 24, 35);
+        policeGraphics.fillStyle(0x333333);
+        policeGraphics.fillCircle(10, 10, 4);
+        policeGraphics.fillCircle(30, 10, 4);
+        policeGraphics.fillCircle(10, 70, 4);
+        policeGraphics.fillCircle(30, 70, 4);
+        // Emergency lights
+        policeGraphics.fillStyle(0xFF0000);
+        policeGraphics.fillCircle(12, 8, 3);
+        policeGraphics.fillStyle(0x0000FF);
+        policeGraphics.fillCircle(28, 8, 3);
+        policeGraphics.generateTexture('enemy_car_police', 40, 80);
+        policeGraphics.destroy();
+
+        // Create roadblock
+        const roadblockGraphics = this.add.graphics();
+        roadblockGraphics.fillStyle(0xFF0000);
+        roadblockGraphics.fillRect(0, 0, 60, 20);
+        roadblockGraphics.fillStyle(0xFFFFFF);
+        for (let i = 0; i < 6; i++) {
+            roadblockGraphics.fillRect(i * 20, (i % 2) * 10, 10, 10);
+        }
+        roadblockGraphics.generateTexture('obstacle_roadblock_a', 60, 20);
+        roadblockGraphics.destroy();
+
+        // Create particle texture for effects
+        const particleGraphics = this.add.graphics();
+        particleGraphics.fillStyle(0xFFFFFF);
+        particleGraphics.fillCircle(2, 2, 2);
+        particleGraphics.generateTexture('particle', 4, 4);
+        particleGraphics.destroy();
+    }
+
+    createEnemyCarGraphics(key, primaryColor, secondaryColor) {
+        const carGraphics = this.add.graphics();
+        carGraphics.fillStyle(primaryColor);
+        carGraphics.fillRoundedRect(0, 0, 40, 80, 8);
+        carGraphics.fillStyle(secondaryColor);
+        carGraphics.fillRect(8, 15, 24, 35);
+        carGraphics.fillStyle(0x333333);
+        carGraphics.fillCircle(10, 10, 4);
+        carGraphics.fillCircle(30, 10, 4);
+        carGraphics.fillCircle(10, 70, 4);
+        carGraphics.fillCircle(30, 70, 4);
+        carGraphics.generateTexture(key, 40, 80);
+        carGraphics.destroy();
     }
 
     create() {
+        // Scene transition fade-in
+        const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 1);
+        this.tweens.add({
+            targets: overlay,
+            alpha: 0,
+            duration: 500,
+            ease: 'Power2.easeOut',
+            onComplete: () => overlay.destroy()
+        });
+
         // Road boundaries
         this.roadLeftBoundary = 120;
         this.roadRightBoundary = 680;
@@ -74,211 +287,851 @@ class GameScene extends Phaser.Scene {
         this.enemySpeed = 150;
         this.spawnDelay = 1500;
         this.policeSpeed = 100;
-        this.currentTrackIndex = 0;
 
-        // Create a single, full-screen scrolling background
+        // Create scrolling background
         this.road = this.add.tileSprite(400, 300, 800, 600, 'road');
 
-        // Player Car
-        this.car = this.physics.add.sprite(400, 500, 'player_car_hero');
+        // Player Car with entrance animation
+        this.car = this.physics.add.sprite(400, 700, 'player_car_hero');
         this.car.setCollideWorldBounds(true);
-        this.car.body.setSize(45, 130);
+        this.car.body.setSize(30, 60, true);
+        this.car.body.setOffset(5, 10);
         this.car.setInteractive();
-        this.input.setDraggable(this.car);
-        this.input.on('dragstart', () => { this.isDragging = true; });
-        this.input.on('drag', (pointer, gameObject, dragX, dragY) => {
-            gameObject.x = Phaser.Math.Clamp(dragX, this.roadLeftBoundary, this.roadRightBoundary);
-            gameObject.y = Phaser.Math.Clamp(dragY, 50, 550);
-        });
-        this.input.on('dragend', () => { this.isDragging = false; });
         
-        // Sequential Playlist Logic
-        this.sound.stopAll();
-        this.musicPlaylist = ['music_1', 'music_2', 'music_3', 'music_4'];
-        this.playNextTrack();
+        // Car entrance animation
+        this.tweens.add({
+            targets: this.car,
+            y: 500,
+            duration: 1000,
+            ease: 'Back.easeOut'
+        });
+        
+        // Optimized drag system
+        this.input.setDraggable(this.car);
+        this.input.on('dragstart', () => { 
+            this.isDragging = true;
+            // Scale up slightly when dragging
+            this.tweens.add({
+                targets: this.car,
+                scaleX: 1.1,
+                scaleY: 1.1,
+                duration: 150,
+                ease: 'Power2.easeOut'
+            });
+        });
+        this.input.on('drag', (pointer, gameObject, dragX, dragY) => {
+            const clampedX = Phaser.Math.Clamp(dragX, this.roadLeftBoundary + 20, this.roadRightBoundary - 20);
+            const clampedY = Phaser.Math.Clamp(dragY, 50, 550);
+            gameObject.setPosition(clampedX, clampedY);
+        });
+        this.input.on('dragend', () => { 
+            this.isDragging = false;
+            // Scale back to normal
+            this.tweens.add({
+                targets: this.car,
+                scaleX: 1,
+                scaleY: 1,
+                duration: 150,
+                ease: 'Power2.easeOut'
+            });
+        });
 
-        // Enemy and Obstacle Setup
+        // Initialize game objects
         this.enemyCars = this.physics.add.group();
         this.policeCars = this.physics.add.group();
         this.roadblocks = this.physics.add.group();
-        this.spawnTimer = this.time.addEvent({ delay: this.spawnDelay, callback: this.spawnEnemyCar, callbackScope: this, loop: true });
-        this.policeSpawnTimer = this.time.addEvent({ delay: 8000, callback: this.spawnPoliceCar, callbackScope: this, loop: true });
-        this.roadblockSpawnTimer = this.time.addEvent({ delay: 4000, callback: this.spawnRoadblock, callbackScope: this, loop: true, paused: true });
+        
+        this.initializeObjectPools();
+        
+        this.spawnTimer = this.time.addEvent({ 
+            delay: this.spawnDelay, 
+            callback: this.spawnEnemyCar, 
+            callbackScope: this, 
+            loop: true 
+        });
+        this.policeSpawnTimer = this.time.addEvent({ 
+            delay: 8000, 
+            callback: this.spawnPoliceCar, 
+            callbackScope: this, 
+            loop: true 
+        });
+        this.roadblockSpawnTimer = this.time.addEvent({ 
+            delay: 4000, 
+            callback: this.spawnRoadblock, 
+            callbackScope: this, 
+            loop: true, 
+            paused: true 
+        });
 
-        // Collision Handlers
-        this.physics.add.overlap(this.car, this.enemyCars, this.hitEnemy, null, this);
-        this.physics.add.overlap(this.car, this.policeCars, this.hitEnemy, null, this);
+        // Collision handlers
+        this.physics.add.overlap(this.car, this.enemyCars, this.hitEnemy, this.checkPreciseCollision, this);
+        this.physics.add.overlap(this.car, this.policeCars, this.hitEnemy, this.checkPreciseCollision, this);
+        this.physics.add.overlap(this.car, this.roadblocks, this.hitRoadblock, this.checkPreciseCollision, this);
         this.physics.add.collider(this.policeCars, this.enemyCars);
         this.physics.add.collider(this.policeCars, this.policeCars);
-        this.physics.add.overlap(this.car, this.roadblocks, this.hitRoadblock, null, this);
+        this.physics.add.collider(this.enemyCars, this.enemyCars, this.handleEnemyCollision, null, this);
         
-        // Keyboard and UI setup
+        // UI with animations
         this.cursors = this.input.keyboard.createCursorKeys();
-        this.scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '32px', fill: '#fff', fontStyle: 'bold' });
-        this.livesText = this.add.text(620, 16, 'Lives: 3', { fontSize: '32px', fill: '#fff', fontStyle: 'bold' });
-        this.scoreTimer = this.time.addEvent({ delay: 100, callback: this.updateScore, callbackScope: this, loop: true });
+        this.scoreText = this.add.text(16, 16, 'Score: 0', { 
+            fontSize: '32px', 
+            fill: '#fff', 
+            fontStyle: 'bold',
+            stroke: '#000',
+            strokeThickness: 2
+        });
+        this.livesText = this.add.text(620, 16, 'Lives: 3', { 
+            fontSize: '32px', 
+            fill: '#fff', 
+            fontStyle: 'bold',
+            stroke: '#000',
+            strokeThickness: 2
+        });
+
+        // Animated UI entrance
+        this.scoreText.setY(-50);
+        this.livesText.setY(-50);
+        this.tweens.add({
+            targets: [this.scoreText, this.livesText],
+            y: 16,
+            duration: 800,
+            ease: 'Bounce.easeOut',
+            delay: 500
+        });
+        
+        this.scoreTimer = this.time.addEvent({ 
+            delay: 100, 
+            callback: this.updateScore, 
+            callbackScope: this, 
+            loop: true 
+        });
+
+        // Create particle system for effects
+        this.createParticleSystem();
     }
 
-    playNextTrack() {
-        if (this.currentTrackIndex >= this.musicPlaylist.length) {
-            this.currentTrackIndex = 0;
+    createParticleSystem() {
+        // Exhaust particles from player car
+        this.exhaustEmitter = this.add.particles(0, 0, 'particle', {
+            speed: { min: 20, max: 40 },
+            scale: { start: 0.3, end: 0 },
+            alpha: { start: 0.6, end: 0 },
+            lifespan: 300,
+            frequency: 100,
+            tint: 0x666666
+        });
+        this.exhaustEmitter.startFollow(this.car, 0, 30);
+    }
+
+    initializeObjectPools() {
+        const carTypes = ['enemy_car_green', 'enemy_car_yellow', 'enemy_car_blue_sky'];
+        
+        // Pre-create enemy cars
+        for (let i = 0; i < this.maxPoolSize; i++) {
+            const carType = carTypes[i % carTypes.length];
+            const car = this.physics.add.sprite(-100, -100, carType);
+            car.setActive(false).setVisible(false);
+            car.body.setSize(30, 60, true);
+            car.body.setOffset(5, 10);
+            this.enemyCarPool.push(car);
+            this.enemyCars.add(car);
         }
-        const trackKey = this.musicPlaylist[this.currentTrackIndex];
-        this.currentMusic = this.sound.add(trackKey, { volume: 0.5 });
-        this.currentMusic.play();
-        this.currentTrackIndex++;
-        this.currentMusic.on('complete', this.playNextTrack, this);
+        
+        // Pre-create police cars
+        for (let i = 0; i < 5; i++) {
+            const car = this.physics.add.sprite(-100, -100, 'enemy_car_police');
+            car.setActive(false).setVisible(false);
+            car.body.setSize(30, 60, true);
+            car.body.setOffset(5, 10);
+            car.setData('isChasing', false);
+            this.policeCarPool.push(car);
+            this.policeCars.add(car);
+        }
+        
+        // Pre-create roadblocks
+        for (let i = 0; i < 10; i++) {
+            const roadblock = this.physics.add.sprite(-100, -100, 'obstacle_roadblock_a');
+            roadblock.setActive(false).setVisible(false);
+            roadblock.setScale(2);
+            roadblock.body.setSize(roadblock.width * 0.6, roadblock.height * 0.6, true);
+            this.roadblockPool.push(roadblock);
+            this.roadblocks.add(roadblock);
+        }
+    }
+
+    checkPreciseCollision(player, object) {
+        const playerBounds = player.getBounds();
+        const objectBounds = object.getBounds();
+        
+        const overlapX = Math.max(0, Math.min(playerBounds.right, objectBounds.right) - Math.max(playerBounds.left, objectBounds.left));
+        const overlapY = Math.max(0, Math.min(playerBounds.bottom, objectBounds.bottom) - Math.max(playerBounds.top, objectBounds.top));
+        
+        const minOverlapX = Math.min(playerBounds.width, objectBounds.width) * 0.25;
+        const minOverlapY = Math.min(playerBounds.height, objectBounds.height) * 0.25;
+        
+        return overlapX >= minOverlapX && overlapY >= minOverlapY;
+    }
+
+    handleEnemyCollision(car1, car2) {
+        // Add visual feedback for collisions
+        this.createCollisionEffect(car1.x, car1.y);
+        
+        if (car1.x < car2.x) {
+            car1.body.setVelocityX(-50);
+            car2.body.setVelocityX(50);
+        } else {
+            car1.body.setVelocityX(50);
+            car2.body.setVelocityX(-50);
+        }
+    }
+
+    createCollisionEffect(x, y) {
+        // Spark particles
+        const sparks = this.add.particles(x, y, 'particle', {
+            speed: { min: 50, max: 150 },
+            scale: { start: 0.5, end: 0 },
+            alpha: { start: 1, end: 0 },
+            lifespan: 300,
+            quantity: 8,
+            tint: 0xFFAA00
+        });
+        
+        this.time.delayedCall(300, () => sparks.destroy());
+    }
+
+    createExplosionEffect(x, y) {
+        // Explosion particles
+        const explosion = this.add.particles(x, y, 'particle', {
+            speed: { min: 100, max: 300 },
+            scale: { start: 1, end: 0 },
+            alpha: { start: 1, end: 0 },
+            lifespan: 500,
+            quantity: 15,
+            tint: [0xFF6600, 0xFF0000, 0xFFFF00]
+        });
+        
+        this.time.delayedCall(500, () => explosion.destroy());
+    }
+
+    addScreenShake(intensity = 5, duration = 200) {
+        this.screenShakeIntensity = intensity;
+        
+        this.tweens.add({
+            targets: this.cameras.main,
+            x: `+=${Phaser.Math.Between(-intensity, intensity)}`,
+            y: `+=${Phaser.Math.Between(-intensity, intensity)}`,
+            duration: 50,
+            ease: 'Power2.easeInOut',
+            yoyo: true,
+            repeat: Math.floor(duration / 100),
+            onComplete: () => {
+                this.cameras.main.setPosition(0, 0);
+                this.screenShakeIntensity = 0;
+            }
+        });
+    }
+
+    getFromPool(pool, resetCallback) {
+        for (let obj of pool) {
+            if (!obj.active) {
+                obj.setActive(true).setVisible(true);
+                resetCallback(obj);
+                return obj;
+            }
+        }
+        return null;
+    }
+
+    returnToPool(object) {
+        object.setActive(false).setVisible(false);
+        object.body.setVelocity(0, 0);
+        object.body.setAcceleration(0, 0);
+        object.setPosition(-100, -100);
+        object.setScale(1); // Reset scale
+        object.setAlpha(1); // Reset alpha
+        if (object.texture.key === 'enemy_car_police') {
+            object.setData('isChasing', false);
+        }
     }
 
     updateScore() {
         this.score += 1;
         this.scoreText.setText('Score: ' + this.score);
-        if (this.score > 0 && this.score % 200 === 0 && this.spawnDelay > 600) {
-            this.roadSpeed += 0.5;
-            this.enemySpeed += 20;
-            this.policeSpeed += 25;
-            this.spawnTimer.delay *= 0.95;
-            if (!this.roadblockSpawnTimer.paused && this.roadblockSpawnTimer.delay > 1500) {
-                this.roadblockSpawnTimer.delay *= 0.95;
-            }
+        
+        // Animate score milestones
+        if (this.score % 100 === 0) {
+            this.tweens.add({
+                targets: this.scoreText,
+                scaleX: 1.2,
+                scaleY: 1.2,
+                duration: 150,
+                ease: 'Power2.easeOut',
+                yoyo: true
+            });
         }
+        
+        if (this.score > 0 && this.score % 200 === 0) {
+            this.roadSpeed = Math.min(this.roadSpeed + 0.3, 8);
+            this.enemySpeed = Math.min(this.enemySpeed + 15, 300);
+            this.policeSpeed = Math.min(this.policeSpeed + 20, 200);
+            this.spawnTimer.delay = Math.max(this.spawnTimer.delay * 0.96, 400);
+            
+            if (!this.roadblockSpawnTimer.paused) {
+                this.roadblockSpawnTimer.delay = Math.max(this.roadblockSpawnTimer.delay * 0.96, 1000);
+            }
+
+            // Speed increase notification
+            const speedUpText = this.add.text(400, 300, 'SPEED UP!', {
+                fontSize: '48px',
+                fill: '#FF6600',
+                fontStyle: 'bold',
+                stroke: '#000',
+                strokeThickness: 3
+            }).setOrigin(0.5);
+
+            this.tweens.add({
+                targets: speedUpText,
+                alpha: 0,
+                y: 200,
+                duration: 1500,
+                ease: 'Power2.easeOut',
+                onComplete: () => speedUpText.destroy()
+            });
+        }
+        
         if (this.score >= 500 && this.roadblockSpawnTimer.paused) {
             this.roadblockSpawnTimer.paused = false;
-            console.log("ROADBLOCKS ACTIVATED!");
+            
+            // Roadblock warning
+            const warningText = this.add.text(400, 300, 'ROADBLOCKS AHEAD!', {
+                fontSize: '36px',
+                fill: '#FF0000',
+                fontStyle: 'bold',
+                stroke: '#000',
+                strokeThickness: 3
+            }).setOrigin(0.5);
+
+            this.tweens.add({
+                targets: warningText,
+                alpha: 0,
+                y: 200,
+                duration: 2000,
+                ease: 'Power2.easeOut',
+                onComplete: () => warningText.destroy()
+            });
         }
     }
     
     spawnRoadblock() {
-        const x = Phaser.Math.Between(this.roadLeftBoundary, this.roadRightBoundary);
-        const y = -50;
-        const roadblock = this.roadblocks.create(x, y, 'obstacle_roadblock_a');
-        roadblock.setScale(2);
-        roadblock.body.setSize(roadblock.width * 0.8, roadblock.height * 0.8);
+        const roadblock = this.getFromPool(this.roadblockPool, (obj) => {
+            const x = Phaser.Math.Between(this.roadLeftBoundary + 40, this.roadRightBoundary - 40);
+            obj.setPosition(x, -50);
+            obj.setScale(2);
+            
+            // Entrance animation
+            obj.setAlpha(0);
+            this.tweens.add({
+                targets: obj,
+                alpha: 1,
+                duration: 300,
+                ease: 'Power2.easeOut'
+            });
+        });
     }
     
     hitRoadblock(player, roadblock) {
-        if (this.isInvincible) return;
-        this.sound.play('sfx_crash');
-        if (this.currentMusic) { this.currentMusic.stop(); }
-        this.physics.pause();
-        this.spawnTimer.paused = true;
-        this.policeSpawnTimer.paused = true;
-        this.roadblockSpawnTimer.paused = true;
-        this.scoreTimer.paused = true;
-        this.scene.start('GameOverScene', { score: this.score });
+        if (this.isInvincible) return false;
+        
+        this.createExplosionEffect(roadblock.x, roadblock.y);
+        this.addScreenShake(8, 300);
+        this.returnToPool(roadblock);
+        this.gameOver();
+        return true;
     }
 
     spawnEnemyCar() {
-        const x = Phaser.Math.Between(this.roadLeftBoundary, this.roadRightBoundary);
-        const y = -50;
-        const carTypes = ['enemy_car_green', 'enemy_car_yellow', 'enemy_car_blue_sky'];
-        const randomCarKey = Phaser.Math.RND.pick(carTypes);
-        const enemyCar = this.enemyCars.create(x, y, randomCarKey);
-        enemyCar.body.setSize(45, 100);
-        enemyCar.setVelocityY(this.enemySpeed);
+        const enemyCar = this.getFromPool(this.enemyCarPool, (car) => {
+            const x = Phaser.Math.Between(this.roadLeftBoundary + 30, this.roadRightBoundary - 30);
+            car.setPosition(x, -50);
+            car.setVelocityY(this.enemySpeed);
+            car.setVelocityX(0);
+            
+            // Subtle entrance animation
+            car.setScale(0.8);
+            this.tweens.add({
+                targets: car,
+                scaleX: 1,
+                scaleY: 1,
+                duration: 200,
+                ease: 'Power2.easeOut'
+            });
+        });
     }
 
     spawnPoliceCar() {
-        const side = Phaser.Math.RND.pick(['left', 'right']);
-        const yPos = Phaser.Math.RND.pick(this.intersectionYPositions);
-        let startX, driveOnToX, mergeToX;
-        if (side === 'left') { startX = -50; driveOnToX = 100; mergeToX = this.roadLeftBoundary + 40; } 
-        else { startX = 850; driveOnToX = 700; mergeToX = this.roadRightBoundary - 40; }
-        const policeCar = this.policeCars.create(startX, yPos, 'enemy_car_police');
-        policeCar.body.setSize(50, 120);
-        policeCar.setData('isChasing', false);
-        this.tweens.add({
-            targets: policeCar, x: driveOnToX, duration: 800, ease: 'Power1',
-            onComplete: () => {
-                this.tweens.add({
-                    targets: policeCar, x: mergeToX, y: policeCar.y + 150, duration: 1000, ease: 'Power1',
-                    onComplete: () => {
-                        policeCar.setData('isChasing', true);
-                        policeCar.setVelocityY(this.enemySpeed * 0.9);
-                    }
-                });
+        const policeCar = this.getFromPool(this.policeCarPool, (car) => {
+            const side = Phaser.Math.RND.pick(['left', 'right']);
+            const yPos = Phaser.Math.RND.pick(this.intersectionYPositions);
+            let startX, driveOnToX, mergeToX;
+            
+            if (side === 'left') { 
+                startX = -50; 
+                driveOnToX = 100; 
+                mergeToX = this.roadLeftBoundary + 40; 
+            } else { 
+                startX = 850; 
+                driveOnToX = 700; 
+                mergeToX = this.roadRightBoundary - 40; 
             }
+            
+            car.setPosition(startX, yPos);
+            car.setData('isChasing', false);
+            
+            // Police light flashing animation
+            this.tweens.add({
+                targets: car,
+                alpha: 0.7,
+                duration: 200,
+                ease: 'Power1',
+                yoyo: true,
+                repeat: -1
+            });
+            
+            this.tweens.add({
+                targets: car, x: driveOnToX, duration: 800, ease: 'Power1',
+                onComplete: () => {
+                    this.tweens.add({
+                        targets: car, x: mergeToX, y: car.y + 150, duration: 1000, ease: 'Power1',
+                        onComplete: () => {
+                            car.setData('isChasing', true);
+                            car.setVelocityY(this.enemySpeed * 0.9);
+                        }
+                    });
+                }
+            });
         });
     }
 
     hitEnemy(player, enemyCar) {
-        if (this.isInvincible) return;
-        this.sound.play('sfx_crash');
-        enemyCar.destroy();
+        if (this.isInvincible) return false;
+        
+        this.createExplosionEffect(enemyCar.x, enemyCar.y);
+        this.addScreenShake(6, 250);
+        this.returnToPool(enemyCar);
+        
         this.lives--;
         this.livesText.setText('Lives: ' + this.lives);
+        
+        // Lives text animation
+        this.tweens.add({
+            targets: this.livesText,
+            scaleX: 1.3,
+            scaleY: 1.3,
+            tint: 0xFF0000,
+            duration: 200,
+            ease: 'Power2.easeOut',
+            yoyo: true,
+            onComplete: () => {
+                this.livesText.setTint(0xFFFFFF);
+            }
+        });
+        
         if (this.lives <= 0) {
-            if (this.currentMusic) { this.currentMusic.stop(); }
-            this.physics.pause();
-            this.spawnTimer.paused = true;
-            this.policeSpawnTimer.paused = true;
-            this.roadblockSpawnTimer.paused = true;
-            this.scoreTimer.paused = true;
-            this.scene.start('GameOverScene', { score: this.score });
+            this.gameOver();
         } else {
+            // Enhanced invincibility animation
             this.isInvincible = true;
             this.tweens.add({
-                targets: this.car, alpha: 0.5, duration: 200, ease: 'Power1', yoyo: true, repeat: 5,
+                targets: this.car, 
+                alpha: 0.2, 
+                duration: 100, 
+                ease: 'Power1', 
+                yoyo: true, 
+                repeat: 12,
                 onComplete: () => {
                     this.car.setAlpha(1);
                     this.isInvincible = false;
                 }
             });
+            
+            // Add a protective glow effect
+            const glow = this.add.circle(this.car.x, this.car.y, 30, 0x00FFFF, 0.3);
+            this.tweens.add({
+                targets: glow,
+                scaleX: 1.5,
+                scaleY: 1.5,
+                alpha: 0,
+                duration: 1300,
+                ease: 'Power2.easeOut',
+                onComplete: () => glow.destroy()
+            });
+            
+            // Follow the car during invincibility
+            this.tweens.add({
+                targets: glow,
+                x: this.car.x,
+                y: this.car.y,
+                duration: 1300,
+                ease: 'Linear'
+            });
         }
+        return true;
+    }
+
+    gameOver() {
+        // Stop exhaust particles
+        this.exhaustEmitter.stop();
+        
+        // Dramatic game over effect
+        this.addScreenShake(10, 500);
+        
+        // Car explosion
+        this.createExplosionEffect(this.car.x, this.car.y);
+        
+        // Fade out car
+        this.tweens.add({
+            targets: this.car,
+            alpha: 0,
+            scale: 0.5,
+            rotation: Math.PI,
+            duration: 1000,
+            ease: 'Power2.easeIn'
+        });
+        
+        // Pause physics and timers
+        this.physics.pause();
+        this.spawnTimer.paused = true;
+        this.policeSpawnTimer.paused = true;
+        this.roadblockSpawnTimer.paused = true;
+        this.scoreTimer.paused = true;
+        
+        // Transition to game over screen
+        this.time.delayedCall(1500, () => {
+            const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0);
+            this.tweens.add({
+                targets: overlay,
+                alpha: 1,
+                duration: 1000,
+                ease: 'Power2.easeIn',
+                onComplete: () => {
+                    this.scene.start('GameOverScene', { score: this.score });
+                }
+            });
+        });
     }
 
     update() {
-        this.road.tilePositionY -= this.roadSpeed;
+        // Optimized road scrolling with slight variation
+        this.road.tilePositionY -= this.roadSpeed + Math.sin(this.time.now * 0.001) * 0.2;
         
+        // Enhanced player movement with smooth interpolation
         if (!this.isDragging) {
             this.car.body.setVelocity(0);
-            if (this.cursors.left.isDown && this.car.x > this.roadLeftBoundary) { this.car.body.setVelocityX(-this.playerSpeed); }
-            else if (this.cursors.right.isDown && this.car.x < this.roadRightBoundary) { this.car.body.setVelocityX(this.playerSpeed); }
-            if (this.cursors.up.isDown && this.car.y > 50) { this.car.body.setVelocityY(-this.playerSpeed); }
-            else if (this.cursors.down.isDown && this.car.y < 550) { this.car.body.setVelocityY(this.playerSpeed); }
+            
+            const acceleration = this.playerSpeed * 1.2;
+            if (this.cursors.left.isDown && this.car.x > this.roadLeftBoundary + 20) { 
+                this.car.body.setVelocityX(-acceleration);
+                // Slight tilt when turning
+                this.car.setRotation(-0.1);
+            } else if (this.cursors.right.isDown && this.car.x < this.roadRightBoundary - 20) { 
+                this.car.body.setVelocityX(acceleration);
+                this.car.setRotation(0.1);
+            } else {
+                // Return to center rotation
+                this.car.setRotation(0);
+            }
+            
+            if (this.cursors.up.isDown && this.car.y > 50) { 
+                this.car.body.setVelocityY(-acceleration);
+                // Increase exhaust when accelerating
+                this.exhaustEmitter.setFrequency(50);
+            } else if (this.cursors.down.isDown && this.car.y < 550) { 
+                this.car.body.setVelocityY(acceleration);
+                this.exhaustEmitter.setFrequency(150);
+            } else {
+                this.exhaustEmitter.setFrequency(100);
+            }
         }
 
-        this.enemyCars.getChildren().forEach(c => { if (c.y > 700) c.destroy(); });
-        this.policeCars.getChildren().forEach(c => { if (c.y > 700) c.destroy(); });
-        this.roadblocks.getChildren().forEach(roadblock => {
-            roadblock.y += this.roadSpeed;
-            if (roadblock.y > 700) {
-                roadblock.destroy();
+        // Performance: Optimized cleanup using object pools
+        this.cleanupOffscreenObjects();
+        
+        // Optimized police AI with animations
+        this.updatePoliceAI();
+        
+        // Update police car light animations
+        this.updatePoliceEffects();
+    }
+
+    updatePoliceEffects() {
+        this.policeCars.children.entries.forEach(policeCar => {
+            if (policeCar.active && policeCar.getData('isChasing')) {
+                // Emergency light effect - alternate between red and blue tint
+                const time = this.time.now;
+                const flashSpeed = 300;
+                const isRed = Math.floor(time / flashSpeed) % 2 === 0;
+                policeCar.setTint(isRed ? 0xFF4444 : 0x4444FF);
+            }
+        });
+    }
+
+    cleanupOffscreenObjects() {
+        // Clean up enemy cars with exit animation
+        this.enemyCars.children.entries.forEach(car => {
+            if (car.active && car.y > 600) {
+                // Quick fade out before returning to pool
+                this.tweens.add({
+                    targets: car,
+                    alpha: 0,
+                    duration: 100,
+                    onComplete: () => this.returnToPool(car)
+                });
             }
         });
         
-        this.policeCars.getChildren().forEach(policeCar => {
-            if (policeCar.getData('isChasing')) {
-                if (policeCar.x > this.car.x + 10) { policeCar.body.setAccelerationX(-this.policeSpeed); }
-                else if (policeCar.x < this.car.x - 10) { policeCar.body.setAccelerationX(this.policeSpeed); }
-                else { policeCar.body.setAccelerationX(0); }
+        // Clean up police cars
+        this.policeCars.children.entries.forEach(car => {
+            if (car.active && car.y > 650) {
+                this.returnToPool(car);
+            }
+        });
+        
+        // Clean up roadblocks
+        this.roadblocks.children.entries.forEach(roadblock => {
+            if (roadblock.active) {
+                roadblock.y += this.roadSpeed;
+                if (roadblock.y > 650) {
+                    this.returnToPool(roadblock);
+                }
+            }
+        });
+    }
+
+    updatePoliceAI() {
+        this.policeCars.children.entries.forEach(policeCar => {
+            if (policeCar.active && policeCar.getData('isChasing')) {
+                const dx = this.car.x - policeCar.x;
+                const targetSpeed = this.policeSpeed * 0.8;
+                
+                if (Math.abs(dx) > 15) {
+                    const acceleration = dx > 0 ? targetSpeed : -targetSpeed;
+                    policeCar.body.setAccelerationX(acceleration);
+                    
+                    // Add slight rotation when chasing
+                    const targetRotation = dx > 0 ? 0.05 : -0.05;
+                    policeCar.setRotation(targetRotation);
+                } else {
+                    policeCar.body.setAccelerationX(0);
+                    policeCar.setRotation(0);
+                }
             }
         });
     }
 }
 
-// SCENE 3: THE GAME OVER SCREEN
+// SCENE 3: THE GAME OVER SCREEN WITH ANIMATIONS
 class GameOverScene extends Phaser.Scene {
     constructor() {
         super('GameOverScene');
     }
+    
     init(data) {
         this.finalScore = data.score;
     }
+    
     create() {
-        this.add.text(400, 200, 'GAME OVER', { fontSize: '64px', fill: '#ff0000', fontStyle: 'bold' }).setOrigin(0.5);
-        this.add.text(400, 300, 'Your Score: ' + this.finalScore, { fontSize: '32px', fill: '#fff' }).setOrigin(0.5);
-        this.add.text(400, 400, 'Tap or Press SPACE to Restart', { fontSize: '24px', fill: '#fff' }).setOrigin(0.5);
+        // Fade in from black
+        const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 1);
+        this.tweens.add({
+            targets: overlay,
+            alpha: 0,
+            duration: 1000,
+            ease: 'Power2.easeOut',
+            onComplete: () => overlay.destroy()
+        });
+
+        // Animated game over title
+        const gameOverText = this.add.text(400, 150, 'GAME OVER', { 
+            fontSize: '64px', 
+            fill: '#ff0000', 
+            fontStyle: 'bold',
+            stroke: '#000',
+            strokeThickness: 4
+        }).setOrigin(0.5);
+        
+        // Game over title animation
+        gameOverText.setScale(0);
+        this.tweens.add({
+            targets: gameOverText,
+            scale: 1,
+            duration: 800,
+            ease: 'Back.easeOut',
+            delay: 500
+        });
+
+        // Pulsing effect on game over text
+        this.tweens.add({
+            targets: gameOverText,
+            alpha: 0.7,
+            duration: 1000,
+            ease: 'Sine.easeInOut',
+            yoyo: true,
+            repeat: -1,
+            delay: 1300
+        });
+        
+        // Score display with typewriter effect
+        const scoreDisplay = this.add.text(400, 280, '', { 
+            fontSize: '32px', 
+            fill: '#fff',
+            stroke: '#000',
+            strokeThickness: 2
+        }).setOrigin(0.5);
+        
+        // Typewriter effect for score
+        const scoreText = `Your Score: ${this.finalScore}`;
+        let currentChar = 0;
+        
+        this.time.addEvent({
+            delay: 50,
+            callback: () => {
+                if (currentChar <= scoreText.length) {
+                    scoreDisplay.setText(scoreText.substring(0, currentChar));
+                    currentChar++;
+                }
+            },
+            repeat: scoreText.length,
+            callbackScope: this,
+            startAt: 1200
+        });
+
+        // Performance rating based on score
+        let rating = 'Rookie Driver';
+        let ratingColor = '#CCCCCC';
+        
+        if (this.finalScore >= 2000) {
+            rating = 'Speed Demon!';
+            ratingColor = '#FFD700';
+        } else if (this.finalScore >= 1500) {
+            rating = 'Racing Pro';
+            ratingColor = '#FF6600';
+        } else if (this.finalScore >= 1000) {
+            rating = 'Street Racer';
+            ratingColor = '#00FF88';
+        } else if (this.finalScore >= 500) {
+            rating = 'Skilled Driver';
+            ratingColor = '#00AAFF';
+        }
+
+        const ratingText = this.add.text(400, 340, rating, {
+            fontSize: '24px',
+            fill: ratingColor,
+            fontStyle: 'bold',
+            stroke: '#000',
+            strokeThickness: 2
+        }).setOrigin(0.5);
+
+        // Rating animation
+        ratingText.setY(400);
+        this.tweens.add({
+            targets: ratingText,
+            y: 340,
+            duration: 600,
+            ease: 'Bounce.easeOut',
+            delay: 2000
+        });
+        
+        // Restart instruction with bouncing animation
+        const restartText = this.add.text(400, 450, 'Tap or Press SPACE to Restart', { 
+            fontSize: '24px', 
+            fill: '#fff',
+            stroke: '#000',
+            strokeThickness: 2
+        }).setOrigin(0.5);
+        
+        this.tweens.add({
+            targets: restartText,
+            y: restartText.y - 10,
+            duration: 1000,
+            ease: 'Sine.easeInOut',
+            yoyo: true,
+            repeat: -1,
+            delay: 2500
+        });
+
+        // Animated background elements
+        this.createAnimatedBackground();
+        
+        // Input handlers with transition effect
         this.input.keyboard.once('keydown-SPACE', () => {
-            this.scene.start('GameScene');
+            this.restartWithTransition();
         });
         this.input.on('pointerdown', () => {
-            this.scene.start('GameScene');
+            this.restartWithTransition();
+        });
+    }
+
+    createAnimatedBackground() {
+        // Create floating debris/spark effects
+        for (let i = 0; i < 10; i++) {
+            const debris = this.add.circle(
+                Phaser.Math.Between(0, 800), 
+                Phaser.Math.Between(0, 600), 
+                Phaser.Math.Between(2, 6), 
+                0x666666, 
+                0.3
+            );
+            
+            this.tweens.add({
+                targets: debris,
+                x: debris.x + Phaser.Math.Between(-100, 100),
+                y: debris.y + Phaser.Math.Between(-100, 100),
+                alpha: 0,
+                duration: Phaser.Math.Between(3000, 6000),
+                ease: 'Power2.easeOut',
+                delay: Phaser.Math.Between(0, 2000),
+                onComplete: () => debris.destroy()
+            });
+        }
+
+        // Scrolling road effect in background
+        const bgRoad = this.add.tileSprite(400, 300, 800, 600, 'road');
+        bgRoad.setAlpha(0.2);
+        
+        this.tweens.add({
+            targets: bgRoad,
+            tilePositionY: 600,
+            duration: 8000,
+            ease: 'Linear',
+            repeat: -1
+        });
+    }
+
+    restartWithTransition() {
+        // Zoom in transition effect
+        this.tweens.add({
+            targets: this.cameras.main,
+            zoom: 2,
+            duration: 500,
+            ease: 'Power2.easeIn',
+            onComplete: () => {
+                this.scene.start('GameScene');
+            }
+        });
+        
+        // Flash effect
+        const flash = this.add.rectangle(400, 300, 800, 600, 0xFFFFFF, 0);
+        this.tweens.add({
+            targets: flash,
+            alpha: 1,
+            duration: 100,
+            ease: 'Power2.easeOut',
+            yoyo: true
         });
     }
 }
 
-// THE GAME CONFIGURATION
+// OPTIMIZED GAME CONFIGURATION
 const config = {
     type: Phaser.AUTO,
     width: 800,
@@ -288,12 +1141,19 @@ const config = {
         default: 'arcade',
         arcade: {
             gravity: { y: 0 },
-            debug: false
+            debug: false,
+            fps: 60,
+            fixedStep: false
         }
     },
     scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH
+    },
+    render: {
+        antialias: false,
+        pixelArt: false,
+        roundPixels: true
     },
     scene: [StartScene, GameScene, GameOverScene]
 };
